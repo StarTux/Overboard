@@ -135,9 +135,15 @@ public final class EventListener implements Listener {
 
     @EventHandler
     void onEntityDamage(EntityDamageEvent event) {
-        if (event.getCause() == EntityDamageEvent.DamageCause.VOID) {
+        switch (event.getCause()) {
+        case VOID:
             event.setCancelled(true);
             event.getEntity().teleport(plugin.world.getSpawnLocation());
+            break;
+        case ENTITY_ATTACK:
+        case ENTITY_SWEEP_ATTACK:
+            event.setDamage(0);
+            break;
         }
     }
 

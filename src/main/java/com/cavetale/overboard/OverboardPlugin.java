@@ -418,6 +418,9 @@ public final class OverboardPlugin extends JavaPlugin {
             player.getInventory().setItem(2, new ItemStack(Material.BLACK_BED));
             player.getInventory().setItem(8, new ItemStack(Material.APPLE, 12));
             player.getInventory().setHelmet(Mytems.PIRATE_HAT.createItemStack());
+            player.getInventory().setChestplate(Items.dye(Material.LEATHER_CHESTPLATE, team));
+            player.getInventory().setLeggings(Items.dye(Material.LEATHER_LEGGINGS, team));
+            player.getInventory().setBoots(Items.dye(Material.LEATHER_BOOTS, team));
         }
         save();
     }
@@ -438,6 +441,13 @@ public final class OverboardPlugin extends JavaPlugin {
         for (Cannon cannon : save.cannons) {
             Entity entity = Bukkit.getEntity(cannon.armorStand);
             if (entity != null) entity.remove();
+        }
+        for (TeamSave teamSave : save.teams.values()) {
+            if (teamSave.respawnArmorStand != null) {
+                Entity entity = Bukkit.getEntity(teamSave.respawnArmorStand);
+                if (entity != null) entity.remove();
+                teamSave.respawnArmorStand = null;
+            }
         }
         save.cannons.clear();
         save.players.clear();
