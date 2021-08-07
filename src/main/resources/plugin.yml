@@ -1,0 +1,27 @@
+main: com.cavetale.overboard.OverboardPlugin
+
+name: Overboard
+version: 0.1
+description: Overboard Mini Game
+api-version: 1.17
+
+author: StarTux
+website: https://github.com/StarTux/Overboard
+
+depend: [Mytems, Sidebar]
+softdepend: []
+
+commands:
+
+  overboard:
+    aliases: []
+    description: Overboard Command
+    permission: overboard.overboard
+    usage: |-
+      /overboard
+
+permissions:
+
+  overboard.overboard:
+    description: Use /overboard
+    default: op
