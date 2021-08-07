@@ -37,6 +37,7 @@ import org.bukkit.util.Vector;
 
 public final class OverboardPlugin extends JavaPlugin {
     public static final int WINNING_SCORE = 5;
+    public static final Material TREASURE_MAT = Material.GOLD_BLOCK;
     protected OverboardCommand overboardCommand = new OverboardCommand(this);
     protected EventListener eventListener = new EventListener(this);
     protected Save save;
@@ -140,6 +141,7 @@ public final class OverboardPlugin extends JavaPlugin {
                 for (Player player : Bukkit.getOnlinePlayers()) {
                     player.sendTitle("", "" + ChatColor.GREEN + "Fight!");
                     player.sendMessage("" + ChatColor.GREEN + "Fight!");
+                    player.playSound(player.getLocation(), Sound.ENTITY_GENERIC_EXPLODE, SoundCategory.MASTER, 1.0f, 2.0f);
                 }
             } else {
                 if (save.ticks % 20 == 0) {
@@ -195,7 +197,9 @@ public final class OverboardPlugin extends JavaPlugin {
                                                               winningTeam.color));
                         }
                         if (!save.debug) {
-                            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "titles unlockset " + highestScorePlayer.getName() + " Blackbeard");
+                            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "titles unlockset "
+                                                   + highestScorePlayer.getName()
+                                                   + " Blackbeard Scalawag DavyJones");
                         }
                     }
                 }
@@ -267,7 +271,7 @@ public final class OverboardPlugin extends JavaPlugin {
                     Dispenser dispenser = (Dispenser) bd;
                     Location loc = block.getRelative(dispenser.getFacing()).getLocation().add(0.5, 0.5, 0.5);
                     Vector velocity = dispenser.getFacing().getDirection();
-                    if (Math.abs(velocity.getY()) < 0.01) velocity.setY(0.25);
+                    if (Math.abs(velocity.getY()) < 0.01) velocity.setY(0.1);
                     velocity.multiply(3.0);
                     loc.getWorld().spawn(loc, TNTPrimed.class, t -> {
                             t.setVelocity(velocity);
@@ -280,7 +284,7 @@ public final class OverboardPlugin extends JavaPlugin {
             // Treasure
             for (Team team : Team.values()) {
                 Block block = teamInfos.get(team).treasure.toBlock(world);
-                if (block.getType() != Material.AMETHYST_BLOCK) {
+                if (block.getType() != TREASURE_MAT) {
                     TeamSave teamSave = save.teams.get(team);
                     if (teamSave.treasureRespawnCooldown > 0) {
                         teamSave.treasureRespawnCooldown -= 1;
@@ -291,7 +295,7 @@ public final class OverboardPlugin extends JavaPlugin {
                             }
                         }
                     } else {
-                        block.setType(Material.AMETHYST_BLOCK);
+                        block.setType(TREASURE_MAT);
                         for (Player player : Bukkit.getOnlinePlayers()) {
                             player.sendMessage(Component.text("The treasure of team " + team.displayName + " respawned!",
                                                               team.color));
@@ -323,14 +327,25 @@ public final class OverboardPlugin extends JavaPlugin {
                     Block block = teamInfos.get(team).drop.random().toBlock(world);
                     Location loc = block.getLocation().add(0.5, 0.5, 0.5);
                     ItemStack item;
-                    switch (random.nextInt(6)) {
-                    case 0: item = new ItemStack(Material.APPLE, 8); break;
-                    case 1: item = new ItemStack(Material.ENDER_PEARL, 2); break;
-                    case 2: item = new ItemStack(Material.FLINT_AND_STEEL); break;
-                    case 3: item = new ItemStack(Material.TNT); break;
-                    case 4: item = new ItemStack(Material.BUCKET); break;
-                    case 5: item = new ItemStack(Material.LAVA_BUCKET); break;
-                    default: item = null; break;
+                    if (random.nextDouble() < 0.001) {
+                        item = new ItemStack(Material.ELYTRA);
+                    } else {
+                        switch (random.nextInt(13)) {
+                        case 0: item = new ItemStack(Material.APPLE); break;
+                        case 1: item = new ItemStack(Material.APPLE, 2); break;
+                        case 2: item = new ItemStack(Material.APPLE, 3); break;
+                        case 3: item = new ItemStack(Material.ENDER_PEARL, 1); break;
+                        case 4: item = new ItemStack(Material.ENDER_PEARL, 2); break;
+                        case 5: item = new ItemStack(Material.WHITE_BED); break;
+                        case 6: item = new ItemStack(Material.FIRE_CHARGE, 2); break;
+                        case 7: item = new ItemStack(Material.COOKED_COD); break;
+                        case 8: item = new ItemStack(Material.COOKED_SALMON); break;
+                        case 9: item = new ItemStack(Material.SPYGLASS); break;
+                        case 10: item = new ItemStack(Material.SNOWBALL, 16); break;
+                        case 11: item = new ItemStack(Material.ANVIL); break;
+                        case 12: item = new ItemStack(Material.FIRE_CHARGE); break;
+                        default: item = null; break;
+                        }
                     }
                     if (item != null) {
                         world.dropItemNaturally(loc, item);
@@ -415,7 +430,7 @@ public final class OverboardPlugin extends JavaPlugin {
             player.getInventory().clear();
             player.getInventory().setItem(0, Mytems.CAPTAINS_CUTLASS.createItemStack());
             player.getInventory().setItem(1, Mytems.BLUNDERBUSS.createItemStack());
-            player.getInventory().setItem(2, new ItemStack(Material.BLACK_BED));
+            player.getInventory().setItem(2, new ItemStack(team.bedMaterial));
             player.getInventory().setItem(8, new ItemStack(Material.APPLE, 12));
             player.getInventory().setHelmet(Mytems.PIRATE_HAT.createItemStack());
             player.getInventory().setChestplate(Items.dye(Material.LEATHER_CHESTPLATE, team));

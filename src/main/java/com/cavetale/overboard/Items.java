@@ -1,7 +1,6 @@
 package com.cavetale.overboard;
 
 import net.kyori.adventure.text.Component;
-import org.bukkit.DyeColor;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.LeatherArmorMeta;

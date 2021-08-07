@@ -30,6 +30,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
+import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.block.BlockMultiPlaceEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
@@ -88,22 +89,25 @@ public final class EventListener implements Listener {
                    .append(Component.text("Your score ", NamedTextColor.GRAY))
                    .append(Component.text("" + pirate.score, NamedTextColor.WHITE))
                    .build());
+            ls.add(Component.text()
+                   .append(Component.text("Bed placed ", NamedTextColor.GRAY))
+                   .append(Component.text(pirate.bed1 != null ? "Yes" : "No", NamedTextColor.WHITE))
+                   .build());
         }
         for (Team team : Team.values()) {
-            ls.add(Component.text(team.displayName, team.color));
             int alive = plugin.getAlivePlayers(team).size();
             int score = plugin.save.teams.get(team).score;
+            ls.add(Component.text()
+                   .append(Component.text(team.displayName, team.color, TextDecoration.BOLD))
+                   .append(Component.space())
+                   .append(Component.text("" + score, NamedTextColor.WHITE))
+                   .append(Component.text("/", NamedTextColor.GRAY))
+                   .append(Component.text("" + plugin.WINNING_SCORE, NamedTextColor.GRAY))
+                   .build());
             ls.add(Component.text()
                    .append(Component.space())
                    .append(Component.text("Alive ", NamedTextColor.GRAY))
                    .append(Component.text("" + alive, NamedTextColor.WHITE))
-                   .build());
-            ls.add(Component.text()
-                   .append(Component.space())
-                   .append(Component.text("Score ", NamedTextColor.GRAY))
-                   .append(Component.text("" + score, NamedTextColor.WHITE))
-                   .append(Component.text("/", NamedTextColor.DARK_GRAY))
-                   .append(Component.text("" + plugin.WINNING_SCORE, NamedTextColor.WHITE))
                    .build());
         }
         event.add(plugin, Priority.HIGHEST, ls);
@@ -144,13 +148,17 @@ public final class EventListener implements Listener {
         case ENTITY_SWEEP_ATTACK:
             event.setDamage(0);
             break;
+        default: break;
         }
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGH)
     void onBlockPlace(BlockPlaceEvent event) {
-        if (plugin.save.state != State.PLAY) return;
         if (event.getPlayer().getGameMode() == GameMode.CREATIVE) return;
+        if (plugin.save.state != State.PLAY) {
+            event.setCancelled(true);
+            return;
+        }
         Vec3i vec = Vec3i.of(event.getBlock());
         if (!plugin.gameRegion.contains(vec)) {
             event.setCancelled(true);
@@ -166,8 +174,11 @@ public final class EventListener implements Listener {
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     void onBlockMultiPlace(BlockMultiPlaceEvent event) {
-        if (plugin.save.state != State.PLAY) return;
         if (event.getPlayer().getGameMode() == GameMode.CREATIVE) return;
+        if (plugin.save.state != State.PLAY) {
+            event.setCancelled(true);
+            return;
+        }
         for (BlockState state : event.getReplacedBlockStates()) {
             Vec3i vec = Vec3i.of(state.getBlock());
             for (Team team : Team.values()) {
@@ -189,8 +200,11 @@ public final class EventListener implements Listener {
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGH)
     void onBlockBreak(BlockBreakEvent event) {
-        if (plugin.save.state != State.PLAY) return;
         Player player = event.getPlayer();
+        if (plugin.save.state != State.PLAY) {
+            event.setCancelled(true);
+            return;
+        }
         if (player.getGameMode() == GameMode.CREATIVE) return;
         Block block = event.getBlock();
         Vec3i vec = Vec3i.of(block);
@@ -216,7 +230,7 @@ public final class EventListener implements Listener {
         }
         Team stolenTeam = null;
         for (Team team : Team.values()) {
-            if (block.getType() == Material.AMETHYST_BLOCK && Objects.equals(plugin.teamInfos.get(team).treasure, vec)) {
+            if (block.getType() == plugin.TREASURE_MAT && Objects.equals(plugin.teamInfos.get(team).treasure, vec)) {
                 stolenTeam = team;
                 break;
             }
@@ -327,6 +341,15 @@ public final class EventListener implements Listener {
                 iter.remove();
             } else {
                 if (!onBlockBreak(block, null)) iter.remove();
+            }
+        }
+    }
+
+    @EventHandler
+    void onBlockFromTo(BlockFromToEvent event) {
+        if (event.getBlock().getType() == Material.FIRE) {
+            if (plugin.random.nextInt(2) > 0) {
+                event.setCancelled(true);
             }
         }
     }
