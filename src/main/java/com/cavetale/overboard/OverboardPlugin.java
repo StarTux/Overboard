@@ -9,12 +9,15 @@ import java.util.EnumMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.GameMode;
+import org.bukkit.GameRule;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Particle;
@@ -33,15 +36,18 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.util.Vector;
 
 public final class OverboardPlugin extends JavaPlugin {
+    public static final int WINNING_SCORE = 5;
     protected OverboardCommand overboardCommand = new OverboardCommand(this);
     protected EventListener eventListener = new EventListener(this);
     protected Save save;
     protected World world;
     protected Map<Team, TeamInfo> teamInfos = new EnumMap<>(Team.class);
+    protected Random random;
     Cuboid gameRegion;
 
     @Override
     public void onEnable() {
+        random = ThreadLocalRandom.current();
         overboardCommand.enable();
         eventListener.enable();
         getDataFolder().mkdirs();
@@ -59,12 +65,15 @@ public final class OverboardPlugin extends JavaPlugin {
         world = Bukkit.getWorlds().get(0);
         File areaFolder = new File(world.getWorldFolder(), "areas");
         AreaFile areaFile = Json.load(new File(areaFolder, "Overboard.json"), AreaFile.class, () -> null);
+        Team[] teams = Team.values();
+        for (Team team : teams) {
+            teamInfos.put(team, new TeamInfo());
+        }
         if (areaFile == null) {
             getLogger().warning("Areas file not found!");
         } else {
             List<Cuboid> list;
             list = areaFile.areas.get("ships");
-            Team[] teams = Team.values();
             if (list == null || list.size() != teams.length) {
                 getLogger().warning("Areas: ships: " + list);
             } else {
@@ -73,11 +82,35 @@ public final class OverboardPlugin extends JavaPlugin {
                 }
             }
             list = areaFile.areas.get("spawns");
-            if (list == null || list.size() != 2) {
+            if (list == null || list.size() != teams.length) {
                 getLogger().warning("Areas: spawns: " + list);
             } else {
                 for (int i = 0; i < teams.length; i += 1) {
                     teamInfos.get(teams[i]).spawn = list.get(i);
+                }
+            }
+            list = areaFile.areas.get("treasures");
+            if (list == null || list.size() != teams.length) {
+                getLogger().warning("Areas: treasures: " + list);
+            } else {
+                for (int i = 0; i < teams.length; i += 1) {
+                    teamInfos.get(teams[i]).treasure = list.get(i).min;
+                }
+            }
+            list = areaFile.areas.get("explosives");
+            if (list == null || list.size() != teams.length) {
+                getLogger().warning("Areas: explosives: " + list);
+            } else {
+                for (int i = 0; i < teams.length; i += 1) {
+                    teamInfos.get(teams[i]).explosive = list.get(i);
+                }
+            }
+            list = areaFile.areas.get("drops");
+            if (list == null || list.size() != teams.length) {
+                getLogger().warning("Areas: drops: " + list);
+            } else {
+                for (int i = 0; i < teams.length; i += 1) {
+                    teamInfos.get(teams[i]).drop = list.get(i);
                 }
             }
             list = areaFile.areas.get("game");
@@ -131,24 +164,41 @@ public final class OverboardPlugin extends JavaPlugin {
                 TeamInfo teamInfo = teamInfos.get(team);
                 if (teamInfo.alive > 0) {
                     aliveTeams += 1;
+                    if (aliveTeams == 1) {
+                        winningTeam = team;
+                    } else {
+                        winningTeam = null;
+                        break;
+                    }
                 }
-                if (aliveTeams == 1) {
-                    winningTeam = team;
-                } else {
-                    winningTeam = null;
-                    break;
+            }
+            if (winningTeam == null) {
+                for (Team team : Team.values()) {
+                    if (save.teams.get(team).score >= WINNING_SCORE) {
+                        winningTeam = team;
+                        break;
+                    }
                 }
             }
             if (winningTeam != null) {
-                // Bukkit.getScheduler().runTaskLater(this, () -> {
-                //         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "titles unlockset " + winner.getName() + " Blackbeard");
-                //     }, 40);
                 for (Player player : Bukkit.getOnlinePlayers()) {
                     player.showTitle(Title.title(Component.text(winningTeam.displayName, winningTeam.color),
                                                  Component.text("wins the game!", winningTeam.color)));
                     player.sendMessage(Component.text(winningTeam.displayName + " wins the game!", winningTeam.color));
                 }
                 getLogger().info(winningTeam.displayName + " wins this game!");
+                if (save.highestScorePlayer != null && save.highestScoreTeam == winningTeam) {
+                    Player highestScorePlayer = Bukkit.getPlayer(save.highestScorePlayer);
+                    if (highestScorePlayer != null) {
+                        for (Player player : Bukkit.getOnlinePlayers()) {
+                            player.sendMessage(Component.text(highestScorePlayer.getName() + " has the highest score: " + save.highestScore,
+                                                              winningTeam.color));
+                        }
+                        if (!save.debug) {
+                            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "titles unlockset " + highestScorePlayer.getName() + " Blackbeard");
+                        }
+                    }
+                }
                 stopGame();
                 return;
             } else if (aliveTeams == 0) {
@@ -174,6 +224,8 @@ public final class OverboardPlugin extends JavaPlugin {
                 if (player.getGameMode() == GameMode.SPECTATOR) {
                     if (pirate.bed1 == null) {
                         save.players.remove(player.getUniqueId());
+                        player.sendMessage(Component.text("Your bed spawn is missing. You are out of the game!",
+                                                          NamedTextColor.RED));
                         continue;
                     }
                     if (pirate.respawnCooldown > 0) {
@@ -191,6 +243,7 @@ public final class OverboardPlugin extends JavaPlugin {
                     }
                 }
             }
+            // Cannons
             Iterator<Cannon> iter = save.cannons.iterator();
             while (iter.hasNext()) {
                 Cannon cannon = iter.next();
@@ -213,13 +266,75 @@ public final class OverboardPlugin extends JavaPlugin {
                     iter.remove();
                     Dispenser dispenser = (Dispenser) bd;
                     Location loc = block.getRelative(dispenser.getFacing()).getLocation().add(0.5, 0.5, 0.5);
-                    Vector velocity = dispenser.getFacing().getDirection().multiply(2.0);
+                    Vector velocity = dispenser.getFacing().getDirection();
+                    if (Math.abs(velocity.getY()) < 0.01) velocity.setY(0.25);
+                    velocity.multiply(3.0);
                     loc.getWorld().spawn(loc, TNTPrimed.class, t -> {
                             t.setVelocity(velocity);
-                            t.setFuseTicks(30);
+                            t.setFuseTicks(20);
                         });
                     loc.getWorld().playSound(loc, Sound.ENTITY_GENERIC_EXPLODE, SoundCategory.BLOCKS, 1.0f, 0.8f);
                     loc.getWorld().spawnParticle(Particle.EXPLOSION_LARGE, loc, 2, 0.5, 0.5, 0.5, 0.0);
+                }
+            }
+            // Treasure
+            for (Team team : Team.values()) {
+                Block block = teamInfos.get(team).treasure.toBlock(world);
+                if (block.getType() != Material.AMETHYST_BLOCK) {
+                    TeamSave teamSave = save.teams.get(team);
+                    if (teamSave.treasureRespawnCooldown > 0) {
+                        teamSave.treasureRespawnCooldown -= 1;
+                        if (teamSave.respawnArmorStand != null) {
+                            Entity entity = Bukkit.getEntity(teamSave.respawnArmorStand);
+                            if (entity != null) {
+                                entity.customName(Component.text("" + (teamSave.treasureRespawnCooldown / 20), NamedTextColor.YELLOW));
+                            }
+                        }
+                    } else {
+                        block.setType(Material.AMETHYST_BLOCK);
+                        for (Player player : Bukkit.getOnlinePlayers()) {
+                            player.sendMessage(Component.text("The treasure of team " + team.displayName + " respawned!",
+                                                              team.color));
+                        }
+                        if (teamSave.respawnArmorStand != null) {
+                            Entity entity = Bukkit.getEntity(teamSave.respawnArmorStand);
+                            if (entity != null) entity.remove();
+                            teamSave.respawnArmorStand = null;
+                        }
+                    }
+                }
+            }
+            // Explosives
+            if (save.explosiveCooldown > 0) {
+                save.explosiveCooldown -= 1;
+            } else {
+                save.explosiveCooldown = 20 * (5 + random.nextInt(10));
+                for (Team team : Team.values()) {
+                    Block block = teamInfos.get(team).explosive.random().toBlock(world);
+                    if (block.isEmpty()) block.setType(Material.TNT);
+                }
+            }
+            // Drop
+            if (save.dropCooldown > 0) {
+                save.dropCooldown -= 1;
+            } else {
+                save.dropCooldown = 20 * (5 + random.nextInt(10));
+                for (Team team : Team.values()) {
+                    Block block = teamInfos.get(team).drop.random().toBlock(world);
+                    Location loc = block.getLocation().add(0.5, 0.5, 0.5);
+                    ItemStack item;
+                    switch (random.nextInt(6)) {
+                    case 0: item = new ItemStack(Material.APPLE, 8); break;
+                    case 1: item = new ItemStack(Material.ENDER_PEARL, 2); break;
+                    case 2: item = new ItemStack(Material.FLINT_AND_STEEL); break;
+                    case 3: item = new ItemStack(Material.TNT); break;
+                    case 4: item = new ItemStack(Material.BUCKET); break;
+                    case 5: item = new ItemStack(Material.LAVA_BUCKET); break;
+                    default: item = null; break;
+                    }
+                    if (item != null) {
+                        world.dropItemNaturally(loc, item);
+                    }
                 }
             }
         }
@@ -227,7 +342,6 @@ public final class OverboardPlugin extends JavaPlugin {
     }
 
     protected void die(Player player) {
-        player.getInventory().clear();
         player.setGameMode(GameMode.SPECTATOR);
         Pirate pirate = save.getPirate(player);
         if (pirate == null) return;
@@ -250,11 +364,34 @@ public final class OverboardPlugin extends JavaPlugin {
         return result;
     }
 
+    List<Player> getAlivePlayers(Team team) {
+        List<Player> result = new ArrayList<>();
+        if (save.players == null) return result;
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (!player.isValid()) continue;
+            switch (player.getGameMode()) {
+            case SURVIVAL: case ADVENTURE: break; // OK
+            default: continue; // NO
+            }
+            Pirate pirate = save.getPirate(player);
+            if (pirate == null) continue;
+            if (pirate.team != team) continue;
+            result.add(player);
+        }
+        return result;
+    }
+
     void startGame() {
-        save.state = State.WARMUP;
-        save.ticks = 0;
+        save.newGame();
         world.setPVP(false);
-        save.players.clear();
+        world.setGameRule(GameRule.NATURAL_REGENERATION, true);
+        world.setGameRule(GameRule.DO_FIRE_TICK, true);
+        world.setGameRule(GameRule.RANDOM_TICK_SPEED, 3);
+        world.setGameRule(GameRule.DO_TILE_DROPS, true);
+        world.setGameRule(GameRule.SHOW_DEATH_MESSAGES, true);
+        for (Team team : Team.values()) {
+            save.teams.put(team, new TeamSave());
+        }
         List<Player> players = new ArrayList<>();
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.getGameMode() == GameMode.CREATIVE) continue;
@@ -268,14 +405,19 @@ public final class OverboardPlugin extends JavaPlugin {
             Team team = i < half ? Team.RED : Team.BLUE;
             Pirate pirate = new Pirate(team);
             save.players.put(player.getUniqueId(), pirate);
-            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "ml add " + player.getName());
+            if (!save.debug) {
+                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "ml add " + player.getName());
+            }
             Location spawnLocation = teamInfos.get(team).spawn.random()
                 .toBlock(world).getLocation()
                 .add(0.5, 0.0, 0.5);
             spawnPlayer(player, pirate, spawnLocation);
+            player.getInventory().clear();
             player.getInventory().setItem(0, Mytems.CAPTAINS_CUTLASS.createItemStack());
             player.getInventory().setItem(1, Mytems.BLUNDERBUSS.createItemStack());
+            player.getInventory().setItem(2, new ItemStack(Material.BLACK_BED));
             player.getInventory().setItem(8, new ItemStack(Material.APPLE, 12));
+            player.getInventory().setHelmet(Mytems.PIRATE_HAT.createItemStack());
         }
         save();
     }
@@ -286,8 +428,6 @@ public final class OverboardPlugin extends JavaPlugin {
         player.setFoodLevel(20);
         player.setSaturation(20.0f);
         player.setGameMode(GameMode.SURVIVAL);
-        player.getInventory().clear();
-        player.getInventory().setHelmet(Mytems.PIRATE_HAT.createItemStack());
     }
 
     void stopGame() {
@@ -304,5 +444,7 @@ public final class OverboardPlugin extends JavaPlugin {
         save.state = State.IDLE;
         save();
         world.setPVP(false);
+        world.setGameRule(GameRule.DO_FIRE_TICK, false);
+        world.setGameRule(GameRule.RANDOM_TICK_SPEED, 0);
     }
 }

@@ -8,6 +8,7 @@ public final class Pirate {
     protected Vec3i bed1;
     protected Vec3i bed2;
     protected int respawnCooldown;
+    protected int score;
 
     public Pirate() { }
 

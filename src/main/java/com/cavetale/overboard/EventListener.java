@@ -9,10 +9,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.GameMode;
@@ -20,6 +20,9 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Tag;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockState;
+import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.type.Dispenser;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -73,21 +76,37 @@ public final class EventListener implements Listener {
     void onPlayerSidebar(PlayerSidebarEvent event) {
         if (plugin.save.state != State.PLAY && plugin.save.state != State.WARMUP) return;
         Player player = event.getPlayer();
-        List<String> ls = new ArrayList<>();
-        ls.add("" + ChatColor.DARK_RED + ChatColor.BOLD + "Overboard!");
-        ls.add(ChatColor.GRAY + "Sprint + Cutlass Hit");
-        ls.add(ChatColor.GRAY + " = Extra Knockback");
-        ls.add("");
-        String all = plugin.getAlivePlayers().stream()
-            .map(s -> s.getName())
-            .sorted()
-            .collect(Collectors.joining(" "));
-        List<String> alls = wrap(all, 24);
-        if (alls.size() > 3) {
-            alls = alls.subList(0, 3);
+        List<Component> ls = new ArrayList<>();
+        ls.add(Component.text("Overboard!", NamedTextColor.DARK_RED, TextDecoration.BOLD));
+        Pirate pirate = plugin.save.getPirate(player);
+        if (pirate != null) {
+            ls.add(Component.text()
+                   .append(Component.text("Your team ", NamedTextColor.GRAY))
+                   .append(Component.text(pirate.team.displayName, pirate.team.color))
+                   .build());
+            ls.add(Component.text()
+                   .append(Component.text("Your score ", NamedTextColor.GRAY))
+                   .append(Component.text("" + pirate.score, NamedTextColor.WHITE))
+                   .build());
         }
-        ls.addAll(alls);
-        event.addLines(plugin, Priority.HIGHEST, ls);
+        for (Team team : Team.values()) {
+            ls.add(Component.text(team.displayName, team.color));
+            int alive = plugin.getAlivePlayers(team).size();
+            int score = plugin.save.teams.get(team).score;
+            ls.add(Component.text()
+                   .append(Component.space())
+                   .append(Component.text("Alive ", NamedTextColor.GRAY))
+                   .append(Component.text("" + alive, NamedTextColor.WHITE))
+                   .build());
+            ls.add(Component.text()
+                   .append(Component.space())
+                   .append(Component.text("Score ", NamedTextColor.GRAY))
+                   .append(Component.text("" + score, NamedTextColor.WHITE))
+                   .append(Component.text("/", NamedTextColor.DARK_GRAY))
+                   .append(Component.text("" + plugin.WINNING_SCORE, NamedTextColor.WHITE))
+                   .build());
+        }
+        event.add(plugin, Priority.HIGHEST, ls);
     }
 
     public static List<String> wrap(String what, final int maxLineLength) {
@@ -131,12 +150,27 @@ public final class EventListener implements Listener {
             event.setCancelled(true);
             return;
         }
+        for (Team team : Team.values()) {
+            if (Objects.equals(plugin.teamInfos.get(team).treasure, vec)) {
+                event.setCancelled(true);
+                return;
+            }
+        }
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     void onBlockMultiPlace(BlockMultiPlaceEvent event) {
         if (plugin.save.state != State.PLAY) return;
         if (event.getPlayer().getGameMode() == GameMode.CREATIVE) return;
+        for (BlockState state : event.getReplacedBlockStates()) {
+            Vec3i vec = Vec3i.of(state.getBlock());
+            for (Team team : Team.values()) {
+                if (Objects.equals(plugin.teamInfos.get(team).treasure, vec)) {
+                    event.setCancelled(true);
+                    return;
+                }
+            }
+        }
         Player player = event.getPlayer();
         Pirate pirate = plugin.save.getPirate(player);
         if (pirate == null) return;
@@ -150,33 +184,85 @@ public final class EventListener implements Listener {
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGH)
     void onBlockBreak(BlockBreakEvent event) {
         if (plugin.save.state != State.PLAY) return;
-        if (event.getPlayer().getGameMode() == GameMode.CREATIVE) return;
-        Vec3i vec = Vec3i.of(event.getBlock());
+        Player player = event.getPlayer();
+        if (player.getGameMode() == GameMode.CREATIVE) return;
+        Block block = event.getBlock();
+        Vec3i vec = Vec3i.of(block);
         if (!plugin.gameRegion.contains(vec)) {
             event.setCancelled(true);
             return;
         }
-        onBlockBreak(vec);
+        if (!onBlockBreak(block, player)) event.setCancelled(true);
     }
 
-    void onBlockBreak(Vec3i vec) {
+    boolean onBlockBreak(Block block, Player breaker) {
+        Vec3i vec = Vec3i.of(block);
         for (Map.Entry<UUID, Pirate> entry : new ArrayList<>(plugin.save.players.entrySet())) {
-            Pirate pirate = entry.getValue();
-            if (Objects.equals(pirate.bed1, vec) || Objects.equals(pirate.bed2, vec)) {
-                pirate.bed1 = null;
-                pirate.bed2 = null;
+            Pirate bedPirate = entry.getValue();
+            if (Objects.equals(bedPirate.bed1, vec) || Objects.equals(bedPirate.bed2, vec)) {
+                bedPirate.bed1 = null;
+                bedPirate.bed2 = null;
                 Player player = Bukkit.getPlayer(entry.getKey());
                 if (player != null) {
                     player.sendMessage(Component.text("Your bed was broken!", NamedTextColor.RED));
                 }
             }
         }
+        Team stolenTeam = null;
+        for (Team team : Team.values()) {
+            if (block.getType() == Material.AMETHYST_BLOCK && Objects.equals(plugin.teamInfos.get(team).treasure, vec)) {
+                stolenTeam = team;
+                break;
+            }
+        }
+        if (stolenTeam != null) {
+            TeamSave teamSave = plugin.save.teams.get(stolenTeam);
+            teamSave.treasureRespawnCooldown = 20 * 60;
+            ArmorStand armorStand = block.getWorld().spawn(block.getLocation().add(0.5, 0.5, 0.5), ArmorStand.class, e -> {
+                    e.setPersistent(false);
+                    e.setSmall(true);
+                    e.setMarker(true);
+                    e.setInvisible(true);
+                    e.setCustomNameVisible(true);
+                    e.customName(Component.text("" +  (teamSave.treasureRespawnCooldown / 20), NamedTextColor.YELLOW));
+                });
+            if (armorStand != null) teamSave.respawnArmorStand = armorStand.getUniqueId();
+            Component message = breaker != null
+                ? Component.text(breaker.getName() + " stole team " + stolenTeam.displayName + "'s treasure!",
+                                 stolenTeam.color)
+                : Component.text("Team " + stolenTeam.displayName + " had their treasure stolen!",
+                                 stolenTeam.color);
+            for (Player online : Bukkit.getOnlinePlayers()) {
+                online.sendMessage(message);
+            }
+            if (breaker != null) {
+                Pirate breakPirate = plugin.save.getPirate(breaker);
+                if (breakPirate != null) {
+                    if (breakPirate.team != stolenTeam) {
+                        breakPirate.score += 1;
+                        if (breakPirate.score > plugin.save.highestScore) {
+                            plugin.save.highestScore = breakPirate.score;
+                            plugin.save.highestScorePlayer = breaker.getUniqueId();
+                            plugin.save.highestScoreTeam = breakPirate.team;
+                        }
+                        plugin.save.teams.get(breakPirate.team).score += 1;
+                    } else {
+                        breakPirate.score = Math.max(0, breakPirate.score - 1);
+                        plugin.save.teams.get(breakPirate.team).score = Math.max(0, plugin.save.teams.get(breakPirate.team).score - 1);
+                    }
+                }
+                return true;
+            }
+        }
+        return true;
     }
 
     @EventHandler
     void onBlockPreDispense(BlockPreDispenseEvent event) {
         if (plugin.save.state != State.PLAY) return;
         Block block = event.getBlock();
+        BlockData bd = block.getBlockData();
+        if (!(bd instanceof Dispenser)) return;
         Vec3i vec = Vec3i.of(block);
         if (!plugin.gameRegion.contains(vec)) return;
         ItemStack itemStack = event.getItemStack();
@@ -184,16 +270,20 @@ public final class EventListener implements Listener {
         event.setCancelled(true);
         if (plugin.save.cannonAt(vec) != null) return;
         itemStack.subtract(1);
-        Location loc = vec.toBlock(plugin.world).getLocation().add(0.5, 1.5, 0.5);
+        Dispenser dispenser = (Dispenser) bd;
+        Location loc = vec.toBlock(plugin.world).getLocation()
+            .add(0.5, 0.5, 0.5)
+            .add(dispenser.getFacing().getOppositeFace().getDirection());
+        int countdown = 20 * 3;
         ArmorStand armorStand = plugin.world.spawn(loc, ArmorStand.class, e -> {
                 e.setPersistent(false);
                 e.setSmall(true);
                 e.setMarker(true);
                 e.setInvisible(true);
                 e.setCustomNameVisible(true);
-                e.customName(Component.text("" + 3, NamedTextColor.YELLOW));
+                e.customName(Component.text("" + (countdown / 20), NamedTextColor.YELLOW));
             });
-        Cannon cannon = new Cannon(vec, 20 * 3, armorStand == null ? null : armorStand.getUniqueId());
+        Cannon cannon = new Cannon(vec, countdown, armorStand == null ? null : armorStand.getUniqueId());
         plugin.save.cannons.add(cannon);
     }
 
@@ -211,7 +301,7 @@ public final class EventListener implements Listener {
             if (!plugin.gameRegion.contains(vec)) {
                 iter.remove();
             } else {
-                onBlockBreak(vec);
+                if (!onBlockBreak(block, null)) iter.remove();
             }
         }
     }
@@ -230,7 +320,7 @@ public final class EventListener implements Listener {
             if (!plugin.gameRegion.contains(vec)) {
                 iter.remove();
             } else {
-                onBlockBreak(vec);
+                if (!onBlockBreak(block, null)) iter.remove();
             }
         }
     }
