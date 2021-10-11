@@ -139,7 +139,8 @@ public final class OverboardPlugin extends JavaPlugin {
                 save.state = State.PLAY;
                 world.setPVP(true);
                 for (Player player : Bukkit.getOnlinePlayers()) {
-                    player.sendTitle("", "" + ChatColor.GREEN + "Fight!");
+                    player.showTitle(Title.title(Component.empty(),
+                                                 Component.text("Fight!", NamedTextColor.GREEN)));
                     player.sendMessage("" + ChatColor.GREEN + "Fight!");
                     player.playSound(player.getLocation(), Sound.ENTITY_GENERIC_EXPLODE, SoundCategory.MASTER, 1.0f, 2.0f);
                 }
@@ -148,8 +149,8 @@ public final class OverboardPlugin extends JavaPlugin {
                     int seconds = (save.ticks - 1) / 20 + 1;
                     seconds = 10 - seconds;
                     for (Player player : Bukkit.getOnlinePlayers()) {
-                        player.sendTitle("" + ChatColor.GREEN + seconds,
-                                         "" + ChatColor.GREEN + "Get Ready!");
+                        player.showTitle(Title.title(Component.text(seconds, NamedTextColor.GREEN),
+                                                     Component.text("Get Ready!", NamedTextColor.GREEN)));
                         player.sendMessage("" + ChatColor.GREEN + seconds + " Get Ready!");
                     }
                 }
