@@ -239,9 +239,9 @@ public final class OverboardPlugin extends JavaPlugin {
                             int seconds = pirate.respawnCooldown / 20;
                             player.showTitle(Title.title(Component.empty(),
                                                          Component.text("" + seconds, NamedTextColor.WHITE),
-                                                         Title.Times.of(Duration.ZERO,
-                                                                        Duration.ofMillis(500),
-                                                                        Duration.ZERO)));
+                                                         Title.Times.times(Duration.ZERO,
+                                                                           Duration.ofMillis(500),
+                                                                           Duration.ZERO)));
                         }
                     } else {
                         spawnPlayer(player, pirate, pirate.bed1.toBlock(world).getLocation().add(0.5, 0.5, 0.5));
