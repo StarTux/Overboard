@@ -1,5 +1,7 @@
 package com.cavetale.overboard;
 
+import com.cavetale.core.struct.Vec3i;
+
 /**
  * Player data stored in Save.
  */

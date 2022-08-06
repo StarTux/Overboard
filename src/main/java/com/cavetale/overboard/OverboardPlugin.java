@@ -1,5 +1,8 @@
 package com.cavetale.overboard;
 
+import com.cavetale.area.struct.Area;
+import com.cavetale.area.struct.AreasFile;
+import com.cavetale.core.struct.Vec3i;
 import com.cavetale.mytems.Mytems;
 import java.io.File;
 import java.time.Duration;
@@ -43,12 +46,11 @@ public final class OverboardPlugin extends JavaPlugin {
     protected Save save;
     protected World world;
     protected Map<Team, TeamInfo> teamInfos = new EnumMap<>(Team.class);
-    protected Random random;
-    Cuboid gameRegion;
+    protected final Random random = ThreadLocalRandom.current();
+    protected Area gameRegion;
 
     @Override
     public void onEnable() {
-        random = ThreadLocalRandom.current();
         overboardCommand.enable();
         eventListener.enable();
         getDataFolder().mkdirs();
@@ -62,19 +64,18 @@ public final class OverboardPlugin extends JavaPlugin {
         save();
     }
 
-    void loadWorld() {
+    protected void loadWorld() {
         world = Bukkit.getWorlds().get(0);
-        File areaFolder = new File(world.getWorldFolder(), "areas");
-        AreaFile areaFile = Json.load(new File(areaFolder, "Overboard.json"), AreaFile.class, () -> null);
+        AreasFile areasFile = AreasFile.load(world, "Overboard");
         Team[] teams = Team.values();
         for (Team team : teams) {
             teamInfos.put(team, new TeamInfo());
         }
-        if (areaFile == null) {
+        if (areasFile == null) {
             getLogger().warning("Areas file not found!");
         } else {
-            List<Cuboid> list;
-            list = areaFile.areas.get("ships");
+            List<Area> list;
+            list = areasFile.areas.get("ships");
             if (list == null || list.size() != teams.length) {
                 getLogger().warning("Areas: ships: " + list);
             } else {
@@ -82,7 +83,7 @@ public final class OverboardPlugin extends JavaPlugin {
                     teamInfos.get(teams[i]).ship = list.get(i);
                 }
             }
-            list = areaFile.areas.get("spawns");
+            list = areasFile.areas.get("spawns");
             if (list == null || list.size() != teams.length) {
                 getLogger().warning("Areas: spawns: " + list);
             } else {
@@ -90,7 +91,7 @@ public final class OverboardPlugin extends JavaPlugin {
                     teamInfos.get(teams[i]).spawn = list.get(i);
                 }
             }
-            list = areaFile.areas.get("treasures");
+            list = areasFile.areas.get("treasures");
             if (list == null || list.size() != teams.length) {
                 getLogger().warning("Areas: treasures: " + list);
             } else {
@@ -98,7 +99,7 @@ public final class OverboardPlugin extends JavaPlugin {
                     teamInfos.get(teams[i]).treasure = list.get(i).min;
                 }
             }
-            list = areaFile.areas.get("explosives");
+            list = areasFile.areas.get("explosives");
             if (list == null || list.size() != teams.length) {
                 getLogger().warning("Areas: explosives: " + list);
             } else {
@@ -106,7 +107,7 @@ public final class OverboardPlugin extends JavaPlugin {
                     teamInfos.get(teams[i]).explosive = list.get(i);
                 }
             }
-            list = areaFile.areas.get("drops");
+            list = areasFile.areas.get("drops");
             if (list == null || list.size() != teams.length) {
                 getLogger().warning("Areas: drops: " + list);
             } else {
@@ -114,7 +115,7 @@ public final class OverboardPlugin extends JavaPlugin {
                     teamInfos.get(teams[i]).drop = list.get(i);
                 }
             }
-            list = areaFile.areas.get("game");
+            list = areasFile.areas.get("game");
             if (list == null || list.size() != 1) {
                 getLogger().warning("Areas: game: " + list);
             } else {
@@ -315,7 +316,7 @@ public final class OverboardPlugin extends JavaPlugin {
             } else {
                 save.explosiveCooldown = 20 * (5 + random.nextInt(10));
                 for (Team team : Team.values()) {
-                    Block block = teamInfos.get(team).explosive.random().toBlock(world);
+                    Block block = random(teamInfos.get(team).explosive).toBlock(world);
                     if (block.isEmpty()) block.setType(Material.TNT);
                 }
             }
@@ -325,7 +326,7 @@ public final class OverboardPlugin extends JavaPlugin {
             } else {
                 save.dropCooldown = 20 * (5 + random.nextInt(10));
                 for (Team team : Team.values()) {
-                    Block block = teamInfos.get(team).drop.random().toBlock(world);
+                    Block block = random(teamInfos.get(team).drop).toBlock(world);
                     Location loc = block.getLocation().add(0.5, 0.5, 0.5);
                     ItemStack item;
                     if (random.nextDouble() < 0.001) {
@@ -424,7 +425,7 @@ public final class OverboardPlugin extends JavaPlugin {
             if (!save.debug) {
                 Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "ml add " + player.getName());
             }
-            Location spawnLocation = teamInfos.get(team).spawn.random()
+            Location spawnLocation = random(teamInfos.get(team).spawn)
                 .toBlock(world).getLocation()
                 .add(0.5, 0.0, 0.5);
             spawnPlayer(player, pirate, spawnLocation);
@@ -472,5 +473,11 @@ public final class OverboardPlugin extends JavaPlugin {
         world.setPVP(false);
         world.setGameRule(GameRule.DO_FIRE_TICK, false);
         world.setGameRule(GameRule.RANDOM_TICK_SPEED, 0);
+    }
+
+    private Vec3i random(Area area) {
+        return new Vec3i(area.min.x + random.nextInt(area.max.x - area.min.x + 1),
+                         area.min.y + random.nextInt(area.max.y - area.min.y + 1),
+                         area.min.z + random.nextInt(area.max.z - area.min.z + 1));
     }
 }

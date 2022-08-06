@@ -1,5 +1,6 @@
 package com.cavetale.overboard;
 
+import com.cavetale.core.struct.Vec3i;
 import java.util.UUID;
 import lombok.AllArgsConstructor;
 import lombok.NoArgsConstructor;

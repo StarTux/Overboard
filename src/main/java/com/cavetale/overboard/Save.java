@@ -1,5 +1,6 @@
 package com.cavetale.overboard;
 
+import com.cavetale.core.struct.Vec3i;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -35,7 +36,7 @@ public final class Save {
         return null;
     }
 
-    void newGame() {
+    protected void newGame() {
         state = State.WARMUP;
         ticks = 0;
         players.clear();

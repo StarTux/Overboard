@@ -1,7 +1,8 @@
 package com.cavetale.overboard;
 
-import com.cavetale.sidebar.PlayerSidebarEvent;
-import com.cavetale.sidebar.Priority;
+import com.cavetale.core.event.hud.PlayerHudEvent;
+import com.cavetale.core.event.hud.PlayerHudPriority;
+import com.cavetale.core.struct.Vec3i;
 import io.papermc.paper.event.block.BlockPreDispenseEvent;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -74,7 +75,7 @@ public final class EventListener implements Listener {
     }
 
     @EventHandler
-    void onPlayerSidebar(PlayerSidebarEvent event) {
+    void onPlayerHud(PlayerHudEvent event) {
         if (plugin.save.state != State.PLAY && plugin.save.state != State.WARMUP) return;
         Player player = event.getPlayer();
         List<Component> ls = new ArrayList<>();
@@ -110,7 +111,7 @@ public final class EventListener implements Listener {
                    .append(Component.text("" + alive, NamedTextColor.WHITE))
                    .build());
         }
-        event.add(plugin, Priority.HIGHEST, ls);
+        event.sidebar(PlayerHudPriority.HIGHEST, ls);
     }
 
     public static List<String> wrap(String what, final int maxLineLength) {
