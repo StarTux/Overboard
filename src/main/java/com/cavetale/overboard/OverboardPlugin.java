@@ -365,7 +365,7 @@ public final class OverboardPlugin extends JavaPlugin {
         if (vecs.isEmpty()) return;
         Vec3i vec = vecs.get(random.nextInt(vecs.size()));
         Location location = world.getBlockAt(vec.x, world.getMaxHeight(), vec.z).getLocation().add(0.5, 0.0, 0.5);
-        if (random.nextInt(50) == 0) {
+        if (random.nextInt(20) == 0) {
             if (random.nextBoolean()) {
                 getLogger().info("Dropping TNT Minecart at " + vec);
                 world.spawnEntity(location, EntityType.MINECART_TNT);
