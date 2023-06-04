@@ -53,13 +53,24 @@ public final class OverboardCommand implements TabExecutor {
             plugin.save();
             sender.sendMessage(text("Scores reset!", YELLOW));
             return true;
-        case "rewardscores":
+        case "rewardscores": {
             int count = Highscore.reward(plugin.save.scores,
                                          "overboard",
                                          TrophyCategory.SWORD,
                                          plugin.TITLE,
                                          hi -> "You won " + hi.score + " time" + (hi.score == 1 ? "" : "s"));
             sender.sendMessage(text("Rewarded " + count + " players!", YELLOW));
+            return true;
+        }
+        case "skip":
+            switch (plugin.save.state) {
+            case WARMUP:
+                plugin.save.warmupTicks = plugin.WARMUP_TICKS;
+                sender.sendMessage(text("Skipping warmup", YELLOW));
+                break;
+            case IDLE: default:
+                sender.sendMessage(text("Game cannot skip!", RED));
+            }
             return true;
         default: return false;
         }
@@ -70,7 +81,7 @@ public final class OverboardCommand implements TabExecutor {
         if (args.length == 1) {
             String argl = args[0].toLowerCase();
             List<String> result = new ArrayList<>();
-            for (String arg : List.of("start", "stop", "debug", "event", "event", "save", "resetscore", "rewardscores")) {
+            for (String arg : List.of("start", "stop", "debug", "event", "event", "save", "resetscore", "rewardscores", "skip")) {
                 if (arg.contains(argl)) result.add(arg);
             }
             return result;

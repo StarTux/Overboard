@@ -12,18 +12,23 @@ import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.block.data.type.TNT;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockBurnEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
-import org.bukkit.event.block.BlockFromToEvent;
+import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.block.BlockSpreadEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.PlayerBucketFillEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
 import org.spigotmc.event.player.PlayerSpawnLocationEvent;
 import static com.cavetale.core.font.Unicode.tiny;
 import static net.kyori.adventure.text.Component.text;
@@ -50,6 +55,24 @@ public final class EventListener implements Listener {
     }
 
     @EventHandler
+    private void onPlayerRespawn(PlayerRespawnEvent event) {
+        Player player = event.getPlayer();
+        if (plugin.save.state == State.IDLE) {
+            event.setRespawnLocation(Bukkit.getWorlds().get(0).getSpawnLocation());
+        } else {
+            if (!plugin.isGameWorld(player.getWorld())) return;
+            event.setRespawnLocation(player.getLocation());
+        }
+    }
+
+    @EventHandler
+    private void onPlayerSpawnLocation(PlayerSpawnLocationEvent event) {
+        if (plugin.save.state == State.IDLE) {
+            event.setSpawnLocation(Bukkit.getWorlds().get(0).getSpawnLocation());
+        }
+    }
+
+    @EventHandler
     private void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         if (plugin.save.state == State.IDLE) {
@@ -60,7 +83,14 @@ public final class EventListener implements Listener {
             player.setSaturation(20.0f);
             player.setFireTicks(0);
         } else {
-            Bukkit.getScheduler().runTask(plugin, () -> plugin.startPlayer(player));
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                    List<Vec3i> spawnLocations = plugin.findSpawnLocations();
+                    if (spawnLocations.isEmpty()) return;
+                    plugin.startPlayer(player);
+                    Pirate pirate = plugin.save.pirates.get(player.getUniqueId());
+                    pirate.spawnLocation = spawnLocations.get(plugin.random.nextInt(spawnLocations.size()));
+                    player.teleport(pirate.spawnLocation.toCenterFloorLocation(plugin.world));
+                });
         }
     }
 
@@ -74,7 +104,7 @@ public final class EventListener implements Listener {
         lines.add(plugin.TITLE);
         if (plugin.save.state == State.GAME) {
             lines.add(textOfChildren(text(tiny("time"), GRAY), text(" " + plugin.timeString, AQUA)));
-            lines.add(textOfChildren(text(tiny("fire spread"), GRAY), text(" " + plugin.save.tickSpeed, RED)));
+            lines.add(textOfChildren(text(tiny("fire spread"), GRAY), text(" " + plugin.save.tickSpeed / 3, RED)));
             lines.add(textOfChildren(text(tiny("players"), GRAY), text(" " + plugin.playerCount, RED)));
             Pirate pirate = plugin.save.pirates.get(event.getPlayer().getUniqueId());
             if (pirate != null) {
@@ -124,6 +154,14 @@ public final class EventListener implements Listener {
             event.setCancelled(true);
         } else if (plugin.isDeathArea(vec)) {
             event.setCancelled(true);
+        } else if (event.getBlock().getType() == Material.TNT) {
+            Block block = event.getBlock();
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                    if (block.getType() != Material.TNT) return;
+                    TNT tnt = (TNT) block.getBlockData();
+                    tnt.setUnstable(true);
+                    block.setBlockData(tnt);
+                });
         }
     }
 
@@ -138,6 +176,14 @@ public final class EventListener implements Listener {
         } else if (!plugin.isGameArea(vec)) {
             event.setCancelled(true);
         } else if (plugin.isDeathArea(vec)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    private void onPlayerBucketFill(PlayerBucketFillEvent event) {
+        if (!plugin.isGameWorld(event.getBlock().getWorld())) return;
+        if (event.getBlockClicked().getType() == Material.WATER) {
             event.setCancelled(true);
         }
     }
@@ -177,16 +223,17 @@ public final class EventListener implements Listener {
     }
 
     @EventHandler
-    private void onBlockFromTo(BlockFromToEvent event) {
-        if (event.getBlock().getType() != Material.FIRE) return;
+    private void onBlockSpread(BlockSpreadEvent event) {
+        if (!plugin.isGameWorld(event.getBlock().getWorld())) return;
+        if (event.getSource().getType() != Material.FIRE) return;
         final int radius = 2;
         int fireBlocks = 0;
         for (int dy = -radius; dy <= radius; dy += 1) {
             for (int dz = -radius; dz <= radius; dz += 1) {
                 for (int dx = -radius; dx <= radius; dx += 1) {
-                    if (event.getToBlock().getRelative(dx, dy, dz).getType() == Material.FIRE) {
+                    if (event.getBlock().getRelative(dx, dy, dz).getType() == Material.FIRE) {
                         fireBlocks += 1;
-                        if (fireBlocks > 2) {
+                        if (fireBlocks > 4) {
                             event.setCancelled(true);
                             return;
                         }
@@ -197,9 +244,26 @@ public final class EventListener implements Listener {
     }
 
     @EventHandler
-    private void onPlayerSpawnLocation(PlayerSpawnLocationEvent event) {
-        if (plugin.save.state == State.IDLE) {
-            event.setSpawnLocation(Bukkit.getWorlds().get(0).getSpawnLocation());
+    private void onBlockForm(BlockFormEvent event) {
+        if (!plugin.isGameWorld(event.getBlock().getWorld())) return;
+        switch (event.getNewState().getType()) {
+        case OBSIDIAN:
+        case STONE:
+        case COBBLESTONE:
+        case ICE:
+        case SNOW:
+            event.setCancelled(true);
+        default: break;
         }
+    }
+
+    @EventHandler
+    private void onBlockBurn(BlockBurnEvent event) {
+        if (!plugin.isGameWorld(event.getBlock().getWorld())) return;
+        if (plugin.random.nextInt(6) > 0) return;
+        final float strength = (float) plugin.random.nextDouble() * 2.5f + 1.5f;
+        final boolean fire = false;
+        final boolean breakBlocks = true;
+        plugin.world.createExplosion(event.getBlock().getLocation().add(0.5, 0.5, 0.5), strength, fire, breakBlocks);
     }
 }

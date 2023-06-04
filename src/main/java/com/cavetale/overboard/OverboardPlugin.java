@@ -17,6 +17,7 @@ import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
+import org.bukkit.Difficulty;
 import org.bukkit.GameMode;
 import org.bukkit.GameRule;
 import org.bukkit.Location;
@@ -143,6 +144,8 @@ public final class OverboardPlugin extends JavaPlugin {
         world.setGameRule(GameRule.SHOW_DEATH_MESSAGES, true);
         world.setGameRule(GameRule.DO_DAYLIGHT_CYCLE, true);
         world.setGameRule(GameRule.DO_WEATHER_CYCLE, false);
+        world.setGameRule(GameRule.MOB_GRIEFING, true);
+        world.setDifficulty(Difficulty.PEACEFUL);
         // Spawns
         List<Vec3i> spawnLocations = findSpawnLocations();
         Collections.shuffle(spawnLocations);
@@ -171,9 +174,13 @@ public final class OverboardPlugin extends JavaPlugin {
         save.warmupTicks = 0;
         save.gameTicks = 0;
         save.endTicks = 0;
-        save.tickSpeed = 6;
+        save.tickSpeed = 0;
     }
 
+    /**
+     * Start a player unless they're already playing.
+     * Do everything except pick and port to a spawn location.
+     */
     public void startPlayer(Player player) {
         Pirate pirate = save.pirates.get(player.getUniqueId());
         if (pirate != null && pirate.playing) return;
@@ -200,8 +207,6 @@ public final class OverboardPlugin extends JavaPlugin {
         pirate.spawnLocation = spawnLocations.get(random.nextInt(spawnLocations.size()));
         player.teleport(pirate.spawnLocation.toCenterFloorLocation(world));
         player.setHealth(20.0);
-        player.setFoodLevel(20);
-        player.setSaturation(20.0f);
         player.setFireTicks(0);
         player.setGameMode(GameMode.SURVIVAL);
         return true;
@@ -225,7 +230,7 @@ public final class OverboardPlugin extends JavaPlugin {
         Worlds.deleteWorld(oldWorld);
     }
 
-    private List<Vec3i> findSpawnLocations() {
+    protected List<Vec3i> findSpawnLocations() {
         List<Vec3i> result = new ArrayList<>();
         for (Area area : spawnAreas) {
             for (Vec3i vec : area.enumerate()) {
@@ -255,11 +260,13 @@ public final class OverboardPlugin extends JavaPlugin {
         save.ticks += 1;
     }
 
+    protected static final int WARMUP_TICKS = 20 * 60;
+
     private void tickWarmup() {
-        final int totalTicks = 20 * 60;
-        if (save.warmupTicks >= totalTicks) {
+        if (save.warmupTicks >= WARMUP_TICKS) {
             save.state = State.GAME;
             world.setPVP(true);
+            world.setDifficulty(Difficulty.HARD);
             for (Player player : Bukkit.getOnlinePlayers()) {
                 player.showTitle(title(empty(), textOfChildren(Mytems.CAPTAINS_CUTLASS, text(" Fight!", DARK_RED))));
                 player.sendMessage(empty());
@@ -272,11 +279,11 @@ public final class OverboardPlugin extends JavaPlugin {
         }
         // Show Countdown
         if (save.warmupTicks % 20 == 0) {
-            final int seconds = (totalTicks - save.warmupTicks - 1) / 20 + 1;
+            final int seconds = (WARMUP_TICKS - save.warmupTicks - 1) / 20 + 1;
             timeString = "" + seconds;
             for (Player player : Bukkit.getOnlinePlayers()) {
                 player.sendActionBar(textOfChildren(text(seconds, GRAY), text(" Get Ready!", GREEN)));
-                float progress = ((float) save.warmupTicks / (float) totalTicks) * 1.5f + 0.5f;
+                float progress = ((float) save.warmupTicks / (float) WARMUP_TICKS) * 1.5f + 0.5f;
                 player.playSound(player.getLocation(), Sound.BLOCK_LEVER_CLICK, SoundCategory.MASTER, 0.5f, progress);
             }
         }
@@ -331,7 +338,7 @@ public final class OverboardPlugin extends JavaPlugin {
         } else {
             save.dropCooldown -= 1;
         }
-        if (save.gameTicks % 20 == 0) {
+        if (save.gameTicks % 100 == 0) {
             world.setGameRule(GameRule.RANDOM_TICK_SPEED, save.tickSpeed);
             save.tickSpeed += 1;
         }
@@ -344,13 +351,19 @@ public final class OverboardPlugin extends JavaPlugin {
     private static final List<ItemStack> DROP_ITEMS = List.of(new ItemStack(Material.FLINT_AND_STEEL),
                                                               new ItemStack(Material.TNT),
                                                               new ItemStack(Material.IRON_AXE),
+                                                              new ItemStack(Material.SHEARS),
                                                               new ItemStack(Material.APPLE, 4),
                                                               new ItemStack(Material.APPLE, 8),
-                                                              new ItemStack(Material.APPLE, 16),
+                                                              new ItemStack(Material.APPLE, 12),
                                                               new ItemStack(Material.BREAD, 4),
-                                                              new ItemStack(Material.GOLDEN_APPLE),
+                                                              new ItemStack(Material.BREAD, 8),
+                                                              new ItemStack(Material.BREAD, 12),
                                                               new ItemStack(Material.ELYTRA),
-                                                              new ItemStack(Material.LAVA_BUCKET));
+                                                              new ItemStack(Material.LAVA_BUCKET),
+                                                              new ItemStack(Material.BUCKET),
+                                                              new ItemStack(Material.FIRE_CHARGE),
+                                                              new ItemStack(Material.ENDER_PEARL),
+                                                              new ItemStack(Material.ENDER_PEARL, 2));
 
     private void drop() {
         List<Vec3i> vecs = new ArrayList<>();
@@ -365,13 +378,18 @@ public final class OverboardPlugin extends JavaPlugin {
         if (vecs.isEmpty()) return;
         Vec3i vec = vecs.get(random.nextInt(vecs.size()));
         Location location = world.getBlockAt(vec.x, world.getMaxHeight(), vec.z).getLocation().add(0.5, 0.0, 0.5);
-        if (random.nextInt(20) == 0) {
-            if (random.nextBoolean()) {
+        if (random.nextInt(10) == 0) {
+            switch (random.nextInt(3)) {
+            case 0:
                 getLogger().info("Dropping TNT Minecart at " + vec);
                 world.spawnEntity(location, EntityType.MINECART_TNT);
-            } else {
+                break;
+            case 1:
                 getLogger().info("Dropping Falling Lava at " + vec);
                 world.spawnFallingBlock(location, Material.LAVA.createBlockData());
+                break;
+            case 2: default:
+                world.strikeLightning(vec.toCenterFloorLocation(world));
             }
         } else {
             ItemStack item = DROP_ITEMS.get(random.nextInt(DROP_ITEMS.size()));
@@ -399,8 +417,9 @@ public final class OverboardPlugin extends JavaPlugin {
             return;
         }
         // Death Checks
-        if (player.getLocation().getBlock().isLiquid()) {
+        if (player.getLocation().getBlock().getType() == Material.WATER) {
             player.getWorld().spawnParticle(Particle.WATER_WAKE, player.getLocation(), 32, 0.1, 0.1, 0.1, 0.2);
+            player.getWorld().playSound(player.getLocation(), Sound.ENTITY_GENERIC_SPLASH, 1.0f, 1.0f);
             die(player);
             for (Player online : Bukkit.getOnlinePlayers()) {
                 online.sendMessage(textOfChildren(Mytems.CAPTAINS_CUTLASS, space(), player.displayName(), text(" drowned in the ocean", RED)));
@@ -426,11 +445,11 @@ public final class OverboardPlugin extends JavaPlugin {
     }
 
     protected void die(Player player) {
-        player.setFoodLevel(0);
+        player.setFoodLevel(player.getFoodLevel() / 2);
         player.setGameMode(GameMode.SPECTATOR);
         Pirate pirate = save.pirates.get(player.getUniqueId());
         if (pirate == null) return;
-        pirate.respawnCooldown = 200;
+        pirate.respawnCooldown = 200 + pirate.deaths * 20;
         pirate.deaths += 1;
     }
 
