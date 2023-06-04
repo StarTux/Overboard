@@ -3,22 +3,20 @@ package com.cavetale.overboard;
 import com.cavetale.area.struct.Area;
 import com.cavetale.area.struct.AreasFile;
 import com.cavetale.core.struct.Vec3i;
+import com.cavetale.core.util.Json;
+import com.cavetale.fam.trophy.Highscore;
 import com.cavetale.mytems.Mytems;
+import com.cavetale.mytems.item.trophy.TrophyCategory;
+import com.cavetale.overboard.world.Worlds;
 import java.io.File;
-import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
-import java.util.EnumMap;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.GameMode;
 import org.bukkit.GameRule;
 import org.bukkit.Location;
@@ -28,26 +26,44 @@ import org.bukkit.Sound;
 import org.bukkit.SoundCategory;
 import org.bukkit.World;
 import org.bukkit.block.Block;
-import org.bukkit.block.data.BlockData;
-import org.bukkit.block.data.type.Dispenser;
-import org.bukkit.entity.ArmorStand;
-import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
-import org.bukkit.entity.TNTPrimed;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.util.Vector;
+import org.bukkit.util.BoundingBox;
+import static net.kyori.adventure.text.Component.empty;
+import static net.kyori.adventure.text.Component.space;
+import static net.kyori.adventure.text.Component.text;
+import static net.kyori.adventure.text.Component.textOfChildren;
+import static net.kyori.adventure.text.format.NamedTextColor.*;
+import static net.kyori.adventure.title.Title.title;
 
 public final class OverboardPlugin extends JavaPlugin {
-    public static final int WINNING_SCORE = 5;
-    public static final Material TREASURE_MAT = Material.GOLD_BLOCK;
-    protected OverboardCommand overboardCommand = new OverboardCommand(this);
-    protected EventListener eventListener = new EventListener(this);
-    protected Save save;
-    protected World world;
-    protected Map<Team, TeamInfo> teamInfos = new EnumMap<>(Team.class);
+    private static OverboardPlugin instance;
+    protected final OverboardCommand overboardCommand = new OverboardCommand(this);
+    protected final EventListener eventListener = new EventListener(this);
     protected final Random random = ThreadLocalRandom.current();
-    protected Area gameRegion;
+    // Save
+    protected Save save;
+    // World
+    protected World world;
+    protected List<Area> gameAreas;
+    protected List<Area> deathAreas;
+    protected List<Area> spawnAreas;
+    protected List<Area> dropAreas;
+    protected List<Highscore> highscores;
+    protected List<Component> highscoreLines;
+    protected static final Component TITLE = textOfChildren(Mytems.CAPTAINS_CUTLASS, text("Overboard!", DARK_RED));
+    protected String timeString;
+    protected int playerCount;
+
+    public OverboardPlugin() {
+        instance = this;
+    }
+
+    public static OverboardPlugin plugin() {
+        return instance;
+    }
 
     @Override
     public void onEnable() {
@@ -55,429 +71,384 @@ public final class OverboardPlugin extends JavaPlugin {
         eventListener.enable();
         getDataFolder().mkdirs();
         load();
+        save.state = State.IDLE;
         Bukkit.getScheduler().runTaskTimer(this, this::tick, 1L, 1L);
-        loadWorld();
+        computeHighscores();
     }
 
     @Override
     public void onDisable() {
         save();
+        if (world != null) {
+            Worlds.deleteWorld(world);
+            world = null;
+        }
+    }
+
+
+    public boolean isGameWorld(World w) {
+        return w.equals(this.world);
+    }
+
+    public boolean isGameArea(Vec3i vec) {
+        for (Area area : gameAreas) {
+            if (area.contains(vec)) return true;
+        }
+        return false;
+    }
+
+    public boolean isDeathArea(Vec3i vec) {
+        for (Area area : deathAreas) {
+            if (area.contains(vec)) return true;
+        }
+        return false;
     }
 
     protected void loadWorld() {
-        world = Bukkit.getWorlds().get(0);
+        world = Worlds.loadWorldCopy(save.worldName);
+        if (world == null) throw new IllegalStateException("Loaded world is null");
         AreasFile areasFile = AreasFile.load(world, "Overboard");
-        Team[] teams = Team.values();
-        for (Team team : teams) {
-            teamInfos.put(team, new TeamInfo());
-        }
-        if (areasFile == null) {
-            getLogger().warning("Areas file not found!");
-        } else {
-            List<Area> list;
-            list = areasFile.areas.get("ships");
-            if (list == null || list.size() != teams.length) {
-                getLogger().warning("Areas: ships: " + list);
-            } else {
-                for (int i = 0; i < teams.length; i += 1) {
-                    teamInfos.get(teams[i]).ship = list.get(i);
-                }
-            }
-            list = areasFile.areas.get("spawns");
-            if (list == null || list.size() != teams.length) {
-                getLogger().warning("Areas: spawns: " + list);
-            } else {
-                for (int i = 0; i < teams.length; i += 1) {
-                    teamInfos.get(teams[i]).spawn = list.get(i);
-                }
-            }
-            list = areasFile.areas.get("treasures");
-            if (list == null || list.size() != teams.length) {
-                getLogger().warning("Areas: treasures: " + list);
-            } else {
-                for (int i = 0; i < teams.length; i += 1) {
-                    teamInfos.get(teams[i]).treasure = list.get(i).min;
-                }
-            }
-            list = areasFile.areas.get("explosives");
-            if (list == null || list.size() != teams.length) {
-                getLogger().warning("Areas: explosives: " + list);
-            } else {
-                for (int i = 0; i < teams.length; i += 1) {
-                    teamInfos.get(teams[i]).explosive = list.get(i);
-                }
-            }
-            list = areasFile.areas.get("drops");
-            if (list == null || list.size() != teams.length) {
-                getLogger().warning("Areas: drops: " + list);
-            } else {
-                for (int i = 0; i < teams.length; i += 1) {
-                    teamInfos.get(teams[i]).drop = list.get(i);
-                }
-            }
-            list = areasFile.areas.get("game");
-            if (list == null || list.size() != 1) {
-                getLogger().warning("Areas: game: " + list);
-            } else {
-                gameRegion = list.get(0);
-            }
+        try {
+            if (areasFile == null) throw new IllegalStateException("Loaded areas file is null");
+            gameAreas = areasFile.find("game");
+            if (gameAreas.isEmpty()) throw new IllegalStateException("Game areas is emtpy");
+            deathAreas = areasFile.find("death");
+            if (deathAreas.isEmpty()) throw new IllegalStateException("Death areas is emtpy");
+            spawnAreas = areasFile.find("spawn");
+            if (spawnAreas.isEmpty()) throw new IllegalStateException("Spawn areas is emtpy");
+            dropAreas = areasFile.find("drop");
+            if (dropAreas.isEmpty()) throw new IllegalStateException("Drop areas is emtpy");
+        } catch (IllegalStateException iae) {
+            iae.printStackTrace();
+            Worlds.deleteWorld(world);
+            world = null;
         }
     }
 
-    void load() {
+    public void load() {
         save = Json.load(new File(getDataFolder(), "save.json"), Save.class, Save::new);
     }
 
-    void save() {
+    public void save() {
         Json.save(new File(getDataFolder(), "save.json"), save, true);
     }
 
-    void tick() {
-        if (save == null || save.state == null || save.state == State.IDLE) return;
-        List<Player> alivePlayers = getAlivePlayers();
-        if (save.state == State.WARMUP) {
-            if (save.ticks >= 200) {
-                save.state = State.PLAY;
-                world.setPVP(true);
-                for (Player player : Bukkit.getOnlinePlayers()) {
-                    player.showTitle(Title.title(Component.empty(),
-                                                 Component.text("Fight!", NamedTextColor.GREEN)));
-                    player.sendMessage("" + ChatColor.GREEN + "Fight!");
-                    player.playSound(player.getLocation(), Sound.ENTITY_GENERIC_EXPLODE, SoundCategory.MASTER, 1.0f, 2.0f);
-                }
-            } else {
-                if (save.ticks % 20 == 0) {
-                    int seconds = (save.ticks - 1) / 20 + 1;
-                    seconds = 10 - seconds;
-                    for (Player player : Bukkit.getOnlinePlayers()) {
-                        player.showTitle(Title.title(Component.text(seconds, NamedTextColor.GREEN),
-                                                     Component.text("Get Ready!", NamedTextColor.GREEN)));
-                        player.sendMessage("" + ChatColor.GREEN + seconds + " Get Ready!");
-                    }
-                }
-            }
-        } else if (save.state == State.PLAY) {
-            for (TeamInfo teamInfo : teamInfos.values()) teamInfo.alive = 0;
-            for (Player player : alivePlayers) {
-                Pirate pirate = save.getPirate(player);
-                teamInfos.get(pirate.team).alive += 1;
-            }
-            Team winningTeam = null;
-            int aliveTeams = 0;
-            for (Team team : Team.values()) {
-                TeamInfo teamInfo = teamInfos.get(team);
-                if (teamInfo.alive > 0) {
-                    aliveTeams += 1;
-                    if (aliveTeams == 1) {
-                        winningTeam = team;
-                    } else {
-                        winningTeam = null;
-                        break;
-                    }
-                }
-            }
-            if (winningTeam == null) {
-                for (Team team : Team.values()) {
-                    if (save.teams.get(team).score >= WINNING_SCORE) {
-                        winningTeam = team;
-                        break;
-                    }
-                }
-            }
-            if (winningTeam != null) {
-                for (Player player : Bukkit.getOnlinePlayers()) {
-                    player.showTitle(Title.title(Component.text(winningTeam.displayName, winningTeam.color),
-                                                 Component.text("wins the game!", winningTeam.color)));
-                    player.sendMessage(Component.text(winningTeam.displayName + " wins the game!", winningTeam.color));
-                }
-                getLogger().info(winningTeam.displayName + " wins this game!");
-                if (save.highestScorePlayer != null && save.highestScoreTeam == winningTeam) {
-                    Player highestScorePlayer = Bukkit.getPlayer(save.highestScorePlayer);
-                    if (highestScorePlayer != null) {
-                        for (Player player : Bukkit.getOnlinePlayers()) {
-                            player.sendMessage(Component.text(highestScorePlayer.getName() + " has the highest score: " + save.highestScore,
-                                                              winningTeam.color));
-                        }
-                        if (!save.debug) {
-                            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "titles unlockset "
-                                                   + highestScorePlayer.getName()
-                                                   + " Blackbeard Scalawag DavyJones");
-                        }
-                    }
-                }
-                stopGame();
-                return;
-            } else if (aliveTeams == 0) {
-                for (Player player : Bukkit.getOnlinePlayers()) {
-                    player.showTitle(Title.title(Component.text("Draw!", NamedTextColor.RED),
-                                                 Component.text("Everyone is dead", NamedTextColor.RED)));
-                    player.sendMessage(Component.text("Draw! Everyone is dead", NamedTextColor.RED));
-                }
-                stopGame();
-                return;
-            }
-            for (Player alive : alivePlayers) {
-                if (alive.getLocation().getBlock().isLiquid() || !gameRegion.contains(alive.getLocation())) {
-                    die(alive);
-                    for (Player player : Bukkit.getOnlinePlayers()) {
-                        player.sendMessage(ChatColor.AQUA + alive.getName() + " drowned!");
-                    }
-                }
-            }
-            for (Player player : world.getPlayers()) {
-                Pirate pirate = save.getPirate(player);
-                if (pirate == null) continue;
-                if (player.getGameMode() == GameMode.SPECTATOR) {
-                    if (pirate.bed1 == null) {
-                        save.players.remove(player.getUniqueId());
-                        player.sendMessage(Component.text("Your bed spawn is missing. You are out of the game!",
-                                                          NamedTextColor.RED));
-                        continue;
-                    }
-                    if (pirate.respawnCooldown > 0) {
-                        pirate.respawnCooldown -= 1;
-                        if (pirate.respawnCooldown > 0 && (pirate.respawnCooldown % 20) == 0) {
-                            int seconds = pirate.respawnCooldown / 20;
-                            player.showTitle(Title.title(Component.empty(),
-                                                         Component.text("" + seconds, NamedTextColor.WHITE),
-                                                         Title.Times.times(Duration.ZERO,
-                                                                           Duration.ofMillis(500),
-                                                                           Duration.ZERO)));
-                        }
-                    } else {
-                        spawnPlayer(player, pirate, pirate.bed1.toBlock(world).getLocation().add(0.5, 0.5, 0.5));
-                    }
-                }
-            }
-            // Cannons
-            Iterator<Cannon> iter = save.cannons.iterator();
-            while (iter.hasNext()) {
-                Cannon cannon = iter.next();
-                Entity e = Bukkit.getEntity(cannon.armorStand);
-                ArmorStand armorStand = e instanceof ArmorStand
-                    ? (ArmorStand) e
-                    : null;
-                Block block = cannon.vector.toBlock(world);
-                BlockData bd = block.getBlockData();
-                if (bd.getMaterial() != Material.DISPENSER) {
-                    if (armorStand != null) armorStand.remove();
-                    iter.remove();
-                } else if (cannon.countdown > 0) {
-                    cannon.countdown -= 1;
-                    if (armorStand != null) {
-                        armorStand.customName(Component.text("" + (cannon.countdown / 20), NamedTextColor.YELLOW));
-                    }
-                } else {
-                    if (armorStand != null) armorStand.remove();
-                    iter.remove();
-                    Dispenser dispenser = (Dispenser) bd;
-                    Location loc = block.getRelative(dispenser.getFacing()).getLocation().add(0.5, 0.5, 0.5);
-                    Vector velocity = dispenser.getFacing().getDirection();
-                    if (Math.abs(velocity.getY()) < 0.01) velocity.setY(0.1);
-                    velocity.multiply(3.0);
-                    loc.getWorld().spawn(loc, TNTPrimed.class, t -> {
-                            t.setVelocity(velocity);
-                            t.setFuseTicks(20);
-                        });
-                    loc.getWorld().playSound(loc, Sound.ENTITY_GENERIC_EXPLODE, SoundCategory.BLOCKS, 1.0f, 0.8f);
-                    loc.getWorld().spawnParticle(Particle.EXPLOSION_LARGE, loc, 2, 0.5, 0.5, 0.5, 0.0);
-                }
-            }
-            // Treasure
-            for (Team team : Team.values()) {
-                Block block = teamInfos.get(team).treasure.toBlock(world);
-                if (block.getType() != TREASURE_MAT) {
-                    TeamSave teamSave = save.teams.get(team);
-                    if (teamSave.treasureRespawnCooldown > 0) {
-                        teamSave.treasureRespawnCooldown -= 1;
-                        if (teamSave.respawnArmorStand != null) {
-                            Entity entity = Bukkit.getEntity(teamSave.respawnArmorStand);
-                            if (entity != null) {
-                                entity.customName(Component.text("" + (teamSave.treasureRespawnCooldown / 20), NamedTextColor.YELLOW));
-                            }
-                        }
-                    } else {
-                        block.setType(TREASURE_MAT);
-                        for (Player player : Bukkit.getOnlinePlayers()) {
-                            player.sendMessage(Component.text("The treasure of team " + team.displayName + " respawned!",
-                                                              team.color));
-                        }
-                        if (teamSave.respawnArmorStand != null) {
-                            Entity entity = Bukkit.getEntity(teamSave.respawnArmorStand);
-                            if (entity != null) entity.remove();
-                            teamSave.respawnArmorStand = null;
-                        }
-                    }
-                }
-            }
-            // Explosives
-            if (save.explosiveCooldown > 0) {
-                save.explosiveCooldown -= 1;
-            } else {
-                save.explosiveCooldown = 20 * (5 + random.nextInt(10));
-                for (Team team : Team.values()) {
-                    Block block = random(teamInfos.get(team).explosive).toBlock(world);
-                    if (block.isEmpty()) block.setType(Material.TNT);
-                }
-            }
-            // Drop
-            if (save.dropCooldown > 0) {
-                save.dropCooldown -= 1;
-            } else {
-                save.dropCooldown = 20 * (5 + random.nextInt(10));
-                for (Team team : Team.values()) {
-                    Block block = random(teamInfos.get(team).drop).toBlock(world);
-                    Location loc = block.getLocation().add(0.5, 0.5, 0.5);
-                    ItemStack item;
-                    if (random.nextDouble() < 0.001) {
-                        item = new ItemStack(Material.ELYTRA);
-                    } else {
-                        switch (random.nextInt(13)) {
-                        case 0: item = new ItemStack(Material.APPLE); break;
-                        case 1: item = new ItemStack(Material.APPLE, 2); break;
-                        case 2: item = new ItemStack(Material.APPLE, 3); break;
-                        case 3: item = new ItemStack(Material.ENDER_PEARL, 1); break;
-                        case 4: item = new ItemStack(Material.ENDER_PEARL, 2); break;
-                        case 5: item = new ItemStack(Material.WHITE_BED); break;
-                        case 6: item = new ItemStack(Material.FIRE_CHARGE, 2); break;
-                        case 7: item = new ItemStack(Material.COOKED_COD); break;
-                        case 8: item = new ItemStack(Material.COOKED_SALMON); break;
-                        case 9: item = new ItemStack(Material.SPYGLASS); break;
-                        case 10: item = new ItemStack(Material.SNOWBALL, 16); break;
-                        case 11: item = new ItemStack(Material.ANVIL); break;
-                        case 12: item = new ItemStack(Material.FIRE_CHARGE); break;
-                        default: item = null; break;
-                        }
-                    }
-                    if (item != null) {
-                        world.dropItemNaturally(loc, item);
-                    }
-                }
+    public void startGame() {
+        save.worldName = "StillDuck";
+        loadWorld();
+        world.setPVP(false);
+        world.setGameRule(GameRule.NATURAL_REGENERATION, true);
+        world.setGameRule(GameRule.DO_FIRE_TICK, true);
+        world.setGameRule(GameRule.DO_TILE_DROPS, true);
+        world.setGameRule(GameRule.SHOW_DEATH_MESSAGES, true);
+        world.setGameRule(GameRule.DO_DAYLIGHT_CYCLE, true);
+        world.setGameRule(GameRule.DO_WEATHER_CYCLE, false);
+        // Spawns
+        List<Vec3i> spawnLocations = findSpawnLocations();
+        Collections.shuffle(spawnLocations);
+        int nextSpawnLocationIndex = 0;
+        // Players
+        List<Player> players = new ArrayList<>();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (player.getGameMode() == GameMode.SPECTATOR) continue;
+            if (player.isPermissionSet("group.streamer") && player.hasPermission("group.streamer")) continue;
+            players.add(player);
+        }
+        Collections.shuffle(players);
+        save.pirates.clear();
+        for (Player player : players) {
+            startPlayer(player);
+            Pirate pirate = save.pirates.get(player.getUniqueId());
+            pirate.spawnLocation = spawnLocations.get(nextSpawnLocationIndex++ % spawnLocations.size());
+            player.teleport(pirate.spawnLocation.toCenterFloorLocation(world));
+            if (save.event) {
+                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "ml add " + player.getName());
             }
         }
-        save.ticks += 1;
+        save.state = State.WARMUP;
+        save.winner = null;
+        save.ticks = 0;
+        save.warmupTicks = 0;
+        save.gameTicks = 0;
+        save.endTicks = 0;
+        save.tickSpeed = 6;
     }
 
-    protected void die(Player player) {
-        player.setGameMode(GameMode.SPECTATOR);
-        Pirate pirate = save.getPirate(player);
-        if (pirate == null) return;
-        pirate.respawnCooldown = 200;
+    public void startPlayer(Player player) {
+        Pirate pirate = save.pirates.get(player.getUniqueId());
+        if (pirate != null && pirate.playing) return;
+        pirate = new Pirate();
+        pirate.playing = true;
+        save.pirates.put(player.getUniqueId(), pirate);
+        player.getInventory().clear();
+        player.getInventory().setItem(0, Mytems.CAPTAINS_CUTLASS.createItemStack());
+        player.getInventory().setItem(1, Mytems.BLUNDERBUSS.createItemStack());
+        player.getInventory().setItem(8, new ItemStack(Material.APPLE, 12));
+        player.getInventory().setHelmet(Mytems.PIRATE_HAT.createItemStack());
+        player.setHealth(20.0);
+        player.setFoodLevel(20);
+        player.setSaturation(20.0f);
+        player.setFireTicks(0);
+        player.setGameMode(GameMode.SURVIVAL);
     }
 
-    List<Player> getAlivePlayers() {
-        List<Player> result = new ArrayList<>();
-        if (save.players == null) return result;
+    private boolean respawnPlayer(Player player) {
+        Pirate pirate = save.pirates.get(player.getUniqueId());
+        if (pirate == null) return false;
+        List<Vec3i> spawnLocations = findSpawnLocations();
+        if (spawnLocations.isEmpty()) return false;
+        pirate.spawnLocation = spawnLocations.get(random.nextInt(spawnLocations.size()));
+        player.teleport(pirate.spawnLocation.toCenterFloorLocation(world));
+        player.setHealth(20.0);
+        player.setFoodLevel(20);
+        player.setSaturation(20.0f);
+        player.setFireTicks(0);
+        player.setGameMode(GameMode.SURVIVAL);
+        return true;
+    }
+
+    public void stopGame() {
         for (Player player : Bukkit.getOnlinePlayers()) {
-            if (!player.isValid()) continue;
-            switch (player.getGameMode()) {
-            case SURVIVAL: case ADVENTURE: break; // OK
-            default: continue; // NO
-            }
-            if (save.players.containsKey(player.getUniqueId())) {
-                result.add(player);
+            player.getInventory().clear();
+            player.setGameMode(GameMode.ADVENTURE);
+            player.teleport(Bukkit.getWorlds().get(0).getSpawnLocation());
+            player.setHealth(20.0);
+            player.setFoodLevel(20);
+            player.setSaturation(20.0f);
+            player.setFireTicks(0);
+        }
+        save.pirates.clear();
+        save.state = State.IDLE;
+        save();
+        World oldWorld = world;
+        world = null;
+        Worlds.deleteWorld(oldWorld);
+    }
+
+    private List<Vec3i> findSpawnLocations() {
+        List<Vec3i> result = new ArrayList<>();
+        for (Area area : spawnAreas) {
+            for (Vec3i vec : area.enumerate()) {
+                Block block = vec.toBlock(world);
+                if (!block.getCollisionShape().getBoundingBoxes().isEmpty()) continue;
+                if (!block.getRelative(0, 1, 0).getCollisionShape().getBoundingBoxes().isEmpty()) continue;
+                Collection<BoundingBox> bbs = block.getRelative(0, -1, 0).getCollisionShape().getBoundingBoxes();
+                if (bbs.size() != 1) continue;
+                BoundingBox bb = bbs.iterator().next();
+                if (bb.getHeight() == 1.0 && bb.getWidthX() == 1.0 && bb.getWidthZ() == 1.0) {
+                    result.add(vec);
+                }
             }
         }
         return result;
     }
 
-    List<Player> getAlivePlayers(Team team) {
-        List<Player> result = new ArrayList<>();
-        if (save.players == null) return result;
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            if (!player.isValid()) continue;
-            switch (player.getGameMode()) {
-            case SURVIVAL: case ADVENTURE: break; // OK
-            default: continue; // NO
+    private void tick() {
+        if (world == null || save == null || save.state == null || save.state == State.IDLE) return;
+        if (save.state == State.WARMUP) {
+            tickWarmup();
+        } else if (save.state == State.GAME) {
+            tickGame();
+        } else if (save.state == State.END) {
+            tickEnd();
+        }
+        save.ticks += 1;
+    }
+
+    private void tickWarmup() {
+        final int totalTicks = 20 * 60;
+        if (save.warmupTicks >= totalTicks) {
+            save.state = State.GAME;
+            world.setPVP(true);
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                player.showTitle(title(empty(), textOfChildren(Mytems.CAPTAINS_CUTLASS, text(" Fight!", DARK_RED))));
+                player.sendMessage(empty());
+                player.sendMessage(textOfChildren(Mytems.CAPTAINS_CUTLASS, text(" Fight!", DARK_RED)));
+                player.sendMessage(empty());
+                player.sendActionBar(textOfChildren(Mytems.CAPTAINS_CUTLASS, text(" Fight!", DARK_RED)));
+                player.playSound(player.getLocation(), Sound.ENTITY_WITHER_SPAWN, SoundCategory.MASTER, 0.5f, 1.0f);
             }
-            Pirate pirate = save.getPirate(player);
-            if (pirate == null) continue;
-            if (pirate.team != team) continue;
+            return;
+        }
+        // Show Countdown
+        if (save.warmupTicks % 20 == 0) {
+            final int seconds = (totalTicks - save.warmupTicks - 1) / 20 + 1;
+            timeString = "" + seconds;
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                player.sendActionBar(textOfChildren(text(seconds, GRAY), text(" Get Ready!", GREEN)));
+                float progress = ((float) save.warmupTicks / (float) totalTicks) * 1.5f + 0.5f;
+                player.playSound(player.getLocation(), Sound.BLOCK_LEVER_CLICK, SoundCategory.MASTER, 0.5f, progress);
+            }
+        }
+        // Anchor to spawn
+        for (Player player : getAlivePlayers()) {
+            Location loc = player.getLocation();
+            Location spawn = save.pirates.get(player.getUniqueId()).spawnLocation.toCenterFloorLocation(world);
+            if (!loc.getWorld().equals(spawn.getWorld()) || loc.distanceSquared(spawn) > 1.0) {
+                spawn.setYaw(loc.getYaw());
+                spawn.setPitch(loc.getPitch());
+                player.teleport(spawn);
+            }
+        }
+        save.warmupTicks += 1;
+    }
+
+    private void tickGame() {
+        for (Player player : world.getPlayers()) {
+            Pirate pirate = save.pirates.get(player.getUniqueId());
+            if (pirate == null || !pirate.playing) continue;
+            tickGamePlayer(player, pirate);
+        }
+        List<Player> alive = getAlivePlayers();
+        playerCount = alive.size();
+        if (!save.debug && alive.size() == 1) {
+            save.state = State.END;
+            Player winner = alive.get(0);
+            save.winner = winner.getUniqueId();
+            if (save.event) {
+                save.addScore(winner.getUniqueId(), 1);
+                computeHighscores();
+            }
+            for (Player online : Bukkit.getOnlinePlayers()) {
+                online.sendMessage(empty());
+                online.sendMessage(textOfChildren(Mytems.CAPTAINS_CUTLASS, space(), winner.displayName(), text(" wins the game!", GREEN)));
+                online.sendMessage(empty());
+                online.playSound(online.getLocation(), Sound.ENTITY_ENDER_DRAGON_DEATH, SoundCategory.MASTER, 0.5f, 1.0f);
+            }
+        } else if (!save.debug && alive.isEmpty()) {
+            save.state = State.END;
+            save.winner = null;
+            for (Player online : Bukkit.getOnlinePlayers()) {
+                online.sendMessage(empty());
+                online.sendMessage(textOfChildren(Mytems.CAPTAINS_CUTLASS, text(" The game ends in a draw!", DARK_RED)));
+                online.sendMessage(empty());
+                online.playSound(online.getLocation(), Sound.ENTITY_ENDER_DRAGON_DEATH, SoundCategory.MASTER, 0.5f, 1.0f);
+            }
+        }
+        if (save.dropCooldown <= 0) {
+            drop();
+            save.dropCooldown = 100;
+        } else {
+            save.dropCooldown -= 1;
+        }
+        if (save.gameTicks % 20 == 0) {
+            world.setGameRule(GameRule.RANDOM_TICK_SPEED, save.tickSpeed);
+            save.tickSpeed += 1;
+        }
+        int seconds = save.gameTicks / 20;
+        int minutes = seconds / 60;
+        timeString = minutes + "m " + (seconds % 60) + "s";
+        save.gameTicks += 1;
+    }
+
+    private static final List<ItemStack> DROP_ITEMS = List.of(new ItemStack(Material.FLINT_AND_STEEL),
+                                                              new ItemStack(Material.TNT),
+                                                              new ItemStack(Material.IRON_AXE),
+                                                              new ItemStack(Material.APPLE, 4),
+                                                              new ItemStack(Material.APPLE, 8),
+                                                              new ItemStack(Material.APPLE, 16),
+                                                              new ItemStack(Material.BREAD, 4),
+                                                              new ItemStack(Material.GOLDEN_APPLE),
+                                                              new ItemStack(Material.ELYTRA),
+                                                              new ItemStack(Material.LAVA_BUCKET));
+
+    private void drop() {
+        List<Vec3i> vecs = new ArrayList<>();
+        for (Area area : dropAreas) {
+            for (Vec3i vec : area.enumerate()) {
+                Block block = vec.toBlock(world);
+                if (!block.getCollisionShape().getBoundingBoxes().isEmpty()) continue;
+                if (block.getRelative(0, -1, 0).getCollisionShape().getBoundingBoxes().isEmpty()) continue;
+                vecs.add(vec);
+            }
+        }
+        if (vecs.isEmpty()) return;
+        Vec3i vec = vecs.get(random.nextInt(vecs.size()));
+        Location location = world.getBlockAt(vec.x, world.getMaxHeight(), vec.z).getLocation().add(0.5, 0.0, 0.5);
+        if (random.nextInt(50) == 0) {
+            if (random.nextBoolean()) {
+                getLogger().info("Dropping TNT Minecart at " + vec);
+                world.spawnEntity(location, EntityType.MINECART_TNT);
+            } else {
+                getLogger().info("Dropping Falling Lava at " + vec);
+                world.spawnFallingBlock(location, Material.LAVA.createBlockData());
+            }
+        } else {
+            ItemStack item = DROP_ITEMS.get(random.nextInt(DROP_ITEMS.size()));
+            getLogger().info("Dropping " + item.getType() + " at " + vec);
+            world.dropItem(location, item.clone());
+        }
+    }
+
+    private void tickGamePlayer(Player player, Pirate pirate) {
+        if (player.getGameMode() == GameMode.SPECTATOR) {
+            if (pirate.respawnCooldown <= 0) {
+                if (!respawnPlayer(player)) {
+                    pirate.playing = false;
+                    player.sendMessage(textOfChildren(Mytems.CAPTAINS_CUTLASS, text(" You could not be respawned and are out of the game", RED)));
+                    player.showTitle(title(text("Game Over", RED), empty()));
+                }
+                return;
+            } else {
+                pirate.respawnCooldown -= 1;
+                if (pirate.respawnCooldown > 0 && (pirate.respawnCooldown % 20) == 0) {
+                    int seconds = pirate.respawnCooldown / 20;
+                    player.sendActionBar(text("Respawn in " + seconds, GREEN));
+                }
+            }
+            return;
+        }
+        // Death Checks
+        if (player.getLocation().getBlock().isLiquid()) {
+            player.getWorld().spawnParticle(Particle.WATER_WAKE, player.getLocation(), 32, 0.1, 0.1, 0.1, 0.2);
+            die(player);
+            for (Player online : Bukkit.getOnlinePlayers()) {
+                online.sendMessage(textOfChildren(Mytems.CAPTAINS_CUTLASS, space(), player.displayName(), text(" drowned in the ocean", RED)));
+            }
+            return;
+        }
+        Vec3i vec = Vec3i.of(player.getLocation().getBlock());
+        if (!isGameArea(vec) || isDeathArea(vec)) {
+            die(player);
+            for (Player online : Bukkit.getOnlinePlayers()) {
+                online.sendMessage(textOfChildren(Mytems.CAPTAINS_CUTLASS, space(), player.displayName(), text(" got lost in the wilderness", RED)));
+            }
+            return;
+        }
+    }
+
+    private void tickEnd() {
+        if (save.endTicks > 20 * 60) {
+            stopGame();
+        } else {
+            save.endTicks += 1;
+        }
+    }
+
+    protected void die(Player player) {
+        player.setFoodLevel(0);
+        player.setGameMode(GameMode.SPECTATOR);
+        Pirate pirate = save.pirates.get(player.getUniqueId());
+        if (pirate == null) return;
+        pirate.respawnCooldown = 200;
+        pirate.deaths += 1;
+    }
+
+    private List<Player> getAlivePlayers() {
+        List<Player> result = new ArrayList<>();
+        if (save.pirates == null) return result;
+        for (Player player : world.getPlayers()) {
+            if (player.isDead()) continue;
+            if (player.getGameMode() == GameMode.SPECTATOR) continue;
+            Pirate pirate = save.pirates.get(player.getUniqueId());
+            if (pirate == null || !pirate.playing) continue;
             result.add(player);
         }
         return result;
     }
 
-    void startGame() {
-        save.newGame();
-        world.setPVP(false);
-        world.setGameRule(GameRule.NATURAL_REGENERATION, true);
-        world.setGameRule(GameRule.DO_FIRE_TICK, true);
-        world.setGameRule(GameRule.RANDOM_TICK_SPEED, 3);
-        world.setGameRule(GameRule.DO_TILE_DROPS, true);
-        world.setGameRule(GameRule.SHOW_DEATH_MESSAGES, true);
-        for (Team team : Team.values()) {
-            save.teams.put(team, new TeamSave());
-        }
-        List<Player> players = new ArrayList<>();
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            if (player.getGameMode() == GameMode.CREATIVE) continue;
-            if (player.isPermissionSet("group.streamer") && player.hasPermission("group.streamer")) continue;
-            players.add(player);
-        }
-        Collections.shuffle(players);
-        int half = players.size() / 2;
-        for (int i = 0; i < players.size(); i += 1) {
-            Player player = players.get(i);
-            Team team = i < half ? Team.RED : Team.BLUE;
-            Pirate pirate = new Pirate(team);
-            save.players.put(player.getUniqueId(), pirate);
-            if (!save.debug) {
-                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "ml add " + player.getName());
-            }
-            Location spawnLocation = random(teamInfos.get(team).spawn)
-                .toBlock(world).getLocation()
-                .add(0.5, 0.0, 0.5);
-            spawnPlayer(player, pirate, spawnLocation);
-            player.getInventory().clear();
-            player.getInventory().setItem(0, Mytems.CAPTAINS_CUTLASS.createItemStack());
-            player.getInventory().setItem(1, Mytems.BLUNDERBUSS.createItemStack());
-            player.getInventory().setItem(2, new ItemStack(team.bedMaterial));
-            player.getInventory().setItem(8, new ItemStack(Material.APPLE, 12));
-            player.getInventory().setHelmet(Mytems.PIRATE_HAT.createItemStack());
-            player.getInventory().setChestplate(Items.dye(Material.LEATHER_CHESTPLATE, team));
-            player.getInventory().setLeggings(Items.dye(Material.LEATHER_LEGGINGS, team));
-            player.getInventory().setBoots(Items.dye(Material.LEATHER_BOOTS, team));
-        }
-        save();
-    }
-
-    void spawnPlayer(Player player, Pirate pirate, Location location) {
-        player.teleport(location);
-        player.setHealth(20.0);
-        player.setFoodLevel(20);
-        player.setSaturation(20.0f);
-        player.setGameMode(GameMode.SURVIVAL);
-    }
-
-    void stopGame() {
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            player.getInventory().clear();
-            player.setGameMode(GameMode.SPECTATOR);
-        }
-        for (Cannon cannon : save.cannons) {
-            Entity entity = Bukkit.getEntity(cannon.armorStand);
-            if (entity != null) entity.remove();
-        }
-        for (TeamSave teamSave : save.teams.values()) {
-            if (teamSave.respawnArmorStand != null) {
-                Entity entity = Bukkit.getEntity(teamSave.respawnArmorStand);
-                if (entity != null) entity.remove();
-                teamSave.respawnArmorStand = null;
-            }
-        }
-        save.cannons.clear();
-        save.players.clear();
-        save.state = State.IDLE;
-        save();
-        world.setPVP(false);
-        world.setGameRule(GameRule.DO_FIRE_TICK, false);
-        world.setGameRule(GameRule.RANDOM_TICK_SPEED, 0);
-    }
-
-    private Vec3i random(Area area) {
-        return new Vec3i(area.min.x + random.nextInt(area.max.x - area.min.x + 1),
-                         area.min.y + random.nextInt(area.max.y - area.min.y + 1),
-                         area.min.z + random.nextInt(area.max.z - area.min.z + 1));
+    protected void computeHighscores() {
+        highscores = Highscore.of(save.scores);
+        highscoreLines = Highscore.sidebar(highscores, TrophyCategory.SWORD);
     }
 }
