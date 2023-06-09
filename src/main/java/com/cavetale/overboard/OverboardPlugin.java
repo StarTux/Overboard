@@ -334,11 +334,11 @@ public final class OverboardPlugin extends JavaPlugin {
         }
         if (save.dropCooldown <= 0) {
             drop();
-            save.dropCooldown = 100;
+            save.dropCooldown = 20;
         } else {
             save.dropCooldown -= 1;
         }
-        if (save.gameTicks % 100 == 0) {
+        if (save.gameTicks % 200 == 0) {
             world.setGameRule(GameRule.RANDOM_TICK_SPEED, save.tickSpeed);
             save.tickSpeed += 1;
         }
@@ -378,20 +378,21 @@ public final class OverboardPlugin extends JavaPlugin {
         if (vecs.isEmpty()) return;
         Vec3i vec = vecs.get(random.nextInt(vecs.size()));
         Location location = world.getBlockAt(vec.x, world.getMaxHeight(), vec.z).getLocation().add(0.5, 0.0, 0.5);
-        if (random.nextInt(10) == 0) {
-            switch (random.nextInt(3)) {
-            case 0:
-                getLogger().info("Dropping TNT Minecart at " + vec);
-                world.spawnEntity(location, EntityType.MINECART_TNT);
-                break;
-            case 1:
-                getLogger().info("Dropping Falling Lava at " + vec);
-                world.spawnFallingBlock(location, Material.LAVA.createBlockData());
-                break;
-            case 2: default:
-                world.strikeLightning(vec.toCenterFloorLocation(world));
-            }
-        } else {
+        switch (random.nextInt(10)) {
+        case 0:
+            getLogger().info("Dropping TNT Minecart at " + vec);
+            world.spawnEntity(location, EntityType.MINECART_TNT);
+            break;
+        case 1:
+            world.strikeLightning(vec.toCenterFloorLocation(world));
+            break;
+        case 2:
+        case 3:
+        case 4:
+            getLogger().info("Dropping Fire at " + vec);
+            world.spawnFallingBlock(location, Material.FIRE.createBlockData());
+            break;
+        default:
             ItemStack item = DROP_ITEMS.get(random.nextInt(DROP_ITEMS.size()));
             getLogger().info("Dropping " + item.getType() + " at " + vec);
             world.dropItem(location, item.clone());
@@ -449,7 +450,7 @@ public final class OverboardPlugin extends JavaPlugin {
         player.setGameMode(GameMode.SPECTATOR);
         Pirate pirate = save.pirates.get(player.getUniqueId());
         if (pirate == null) return;
-        pirate.respawnCooldown = 200 + pirate.deaths * 20;
+        pirate.respawnCooldown = 200 + pirate.deaths * 60;
         pirate.deaths += 1;
     }
 

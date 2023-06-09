@@ -22,7 +22,6 @@ import org.bukkit.event.block.BlockBurnEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
-import org.bukkit.event.block.BlockSpreadEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
@@ -104,7 +103,7 @@ public final class EventListener implements Listener {
         lines.add(plugin.TITLE);
         if (plugin.save.state == State.GAME) {
             lines.add(textOfChildren(text(tiny("time"), GRAY), text(" " + plugin.timeString, AQUA)));
-            lines.add(textOfChildren(text(tiny("fire spread"), GRAY), text(" " + plugin.save.tickSpeed / 3, RED)));
+            lines.add(textOfChildren(text(tiny("fire spread"), GRAY), text(" x" + plugin.save.tickSpeed / 3, RED)));
             lines.add(textOfChildren(text(tiny("players"), GRAY), text(" " + plugin.playerCount, RED)));
             Pirate pirate = plugin.save.pirates.get(event.getPlayer().getUniqueId());
             if (pirate != null) {
@@ -223,27 +222,6 @@ public final class EventListener implements Listener {
     }
 
     @EventHandler
-    private void onBlockSpread(BlockSpreadEvent event) {
-        if (!plugin.isGameWorld(event.getBlock().getWorld())) return;
-        if (event.getSource().getType() != Material.FIRE) return;
-        final int radius = 2;
-        int fireBlocks = 0;
-        for (int dy = -radius; dy <= radius; dy += 1) {
-            for (int dz = -radius; dz <= radius; dz += 1) {
-                for (int dx = -radius; dx <= radius; dx += 1) {
-                    if (event.getBlock().getRelative(dx, dy, dz).getType() == Material.FIRE) {
-                        fireBlocks += 1;
-                        if (fireBlocks > 4) {
-                            event.setCancelled(true);
-                            return;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    @EventHandler
     private void onBlockForm(BlockFormEvent event) {
         if (!plugin.isGameWorld(event.getBlock().getWorld())) return;
         switch (event.getNewState().getType()) {
@@ -260,9 +238,9 @@ public final class EventListener implements Listener {
     @EventHandler
     private void onBlockBurn(BlockBurnEvent event) {
         if (!plugin.isGameWorld(event.getBlock().getWorld())) return;
-        if (plugin.random.nextInt(6) > 0) return;
-        final float strength = (float) plugin.random.nextDouble() * 2.5f + 1.5f;
-        final boolean fire = false;
+        if (plugin.random.nextInt(5) > 0) return;
+        final float strength = 4f;
+        final boolean fire = true;
         final boolean breakBlocks = true;
         plugin.world.createExplosion(event.getBlock().getLocation().add(0.5, 0.5, 0.5), strength, fire, breakBlocks);
     }

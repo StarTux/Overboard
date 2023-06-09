@@ -32,8 +32,10 @@ public final class OverboardCommand implements TabExecutor {
             sender.sendMessage(text("Stopping game", RED));
             return true;
         case "debug":
-            plugin.save.debug = !plugin.save.debug;
-            plugin.save();
+            if (args.length == 2) {
+                plugin.save.debug = args[1].equals("true") || args[1].startsWith("enable");
+                plugin.save();
+            }
             sender.sendMessage(text("Debug: " + plugin.save.debug, YELLOW));
             return true;
         case "event":
