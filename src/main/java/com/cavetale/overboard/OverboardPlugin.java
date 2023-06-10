@@ -140,7 +140,7 @@ public final class OverboardPlugin extends JavaPlugin {
         world.setPVP(false);
         world.setGameRule(GameRule.NATURAL_REGENERATION, true);
         world.setGameRule(GameRule.DO_FIRE_TICK, true);
-        world.setGameRule(GameRule.DO_TILE_DROPS, true);
+        world.setGameRule(GameRule.DO_TILE_DROPS, false);
         world.setGameRule(GameRule.SHOW_DEATH_MESSAGES, true);
         world.setGameRule(GameRule.DO_DAYLIGHT_CYCLE, true);
         world.setGameRule(GameRule.DO_WEATHER_CYCLE, false);
