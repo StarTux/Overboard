@@ -43,7 +43,7 @@ public final class OverboardCommand implements TabExecutor {
                 plugin.save.event = args[1].equals("true") || args[1].startsWith("enable");
                 plugin.save();
             }
-            sender.sendMessage(text("Event: " + plugin.save.debug, YELLOW));
+            sender.sendMessage(text("Event: " + plugin.save.event, YELLOW));
             return true;
         case "save":
             plugin.save();
