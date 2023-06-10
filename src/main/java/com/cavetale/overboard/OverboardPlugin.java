@@ -390,7 +390,6 @@ public final class OverboardPlugin extends JavaPlugin {
         Location location = world.getBlockAt(vec.x, world.getMaxHeight(), vec.z).getLocation().add(0.5, 0.0, 0.5);
         switch (random.nextInt(10)) {
         case 0:
-            getLogger().info("Dropping TNT Minecart at " + vec);
             world.spawnEntity(location, EntityType.MINECART_TNT);
             break;
         case 1:
@@ -399,12 +398,10 @@ public final class OverboardPlugin extends JavaPlugin {
         case 2:
         case 3:
         case 4:
-            getLogger().info("Dropping Fire at " + vec);
             world.spawnFallingBlock(location, Material.FIRE.createBlockData());
             break;
         default:
             ItemStack item = DROP_ITEMS.get(random.nextInt(DROP_ITEMS.size()));
-            getLogger().info("Dropping " + item.getType() + " at " + vec);
             world.dropItem(location, item.clone());
         }
         if (save.gameTicks > 20 * 60) {
@@ -412,7 +409,11 @@ public final class OverboardPlugin extends JavaPlugin {
             for (int i = 0; i < max; i += 1) {
                 Vec3i vec2 = enumerated.get(random.nextInt(enumerated.size()));
                 Location location2 = world.getBlockAt(vec2.x, world.getMaxHeight(), vec2.z).getLocation().add(0.5, 0.0, 0.5);
-                world.spawnFallingBlock(location2, Material.FIRE.createBlockData());
+                if (random.nextInt(10) == 0) {
+                    world.spawnEntity(location, EntityType.MINECART_TNT);
+                } else {
+                    world.spawnFallingBlock(location2, Material.FIRE.createBlockData());
+                }
             }
         }
     }
