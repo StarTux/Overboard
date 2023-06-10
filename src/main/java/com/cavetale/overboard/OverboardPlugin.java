@@ -364,7 +364,7 @@ public final class OverboardPlugin extends JavaPlugin {
                                                               new ItemStack(Material.BREAD, 8),
                                                               new ItemStack(Material.BREAD, 12),
                                                               new ItemStack(Material.ELYTRA),
-                                                              new ItemStack(Material.LAVA_BUCKET),
+                                                              //new ItemStack(Material.LAVA_BUCKET),
                                                               new ItemStack(Material.BUCKET),
                                                               new ItemStack(Material.FIRE_CHARGE),
                                                               new ItemStack(Material.ENDER_PEARL),
