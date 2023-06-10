@@ -12,10 +12,8 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
-import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
@@ -340,6 +338,9 @@ public final class OverboardPlugin extends JavaPlugin {
         if (save.dropCooldown <= 0) {
             drop();
             save.dropCooldown = 20;
+            if (save.gameTicks > 20 * 60 && random.nextInt(10) < save.gameTicks / (20 * 60)) {
+                dropPlayer();
+            }
         } else {
             save.dropCooldown -= 1;
         }
@@ -372,18 +373,13 @@ public final class OverboardPlugin extends JavaPlugin {
 
     private void drop() {
         List<Vec3i> vecs = new ArrayList<>();
-        Set<Vec3i> set = new HashSet<>();
         for (Area area : dropAreas) {
             for (Vec3i vec : area.enumerate()) {
-                set.add(vec);
+                Block block = vec.toBlock(world);
+                if (!block.getCollisionShape().getBoundingBoxes().isEmpty()) continue;
+                if (block.getRelative(0, -1, 0).getCollisionShape().getBoundingBoxes().isEmpty()) continue;
+                vecs.add(vec);
             }
-        }
-        List<Vec3i> enumerated = List.copyOf(set);
-        for (Vec3i vec : enumerated) {
-            Block block = vec.toBlock(world);
-            if (!block.getCollisionShape().getBoundingBoxes().isEmpty()) continue;
-            if (block.getRelative(0, -1, 0).getCollisionShape().getBoundingBoxes().isEmpty()) continue;
-            vecs.add(vec);
         }
         if (vecs.isEmpty()) return;
         Vec3i vec = vecs.get(random.nextInt(vecs.size()));
@@ -404,17 +400,22 @@ public final class OverboardPlugin extends JavaPlugin {
             ItemStack item = DROP_ITEMS.get(random.nextInt(DROP_ITEMS.size()));
             world.dropItem(location, item.clone());
         }
-        if (save.gameTicks > 20 * 60) {
-            final int max = save.gameTicks / (20 * 60);
-            for (int i = 0; i < max; i += 1) {
-                Vec3i vec2 = enumerated.get(random.nextInt(enumerated.size()));
-                Location location2 = world.getBlockAt(vec2.x, world.getMaxHeight(), vec2.z).getLocation().add(0.5, 0.0, 0.5);
-                if (random.nextInt(10) == 0) {
-                    world.spawnEntity(location, EntityType.MINECART_TNT);
-                } else {
-                    world.spawnFallingBlock(location2, Material.FIRE.createBlockData());
-                }
-            }
+    }
+
+    private void dropPlayer() {
+        List<Vec3i> vecs = new ArrayList<>();
+        for (Player player : world.getPlayers()) {
+            Pirate pirate = save.pirates.get(player.getUniqueId());
+            if (pirate == null || !pirate.playing) continue;
+            vecs.add(Vec3i.of(player.getLocation().getBlock()));
+        }
+        if (vecs.isEmpty()) return;
+        Vec3i vec = vecs.get(random.nextInt(vecs.size()));
+        Location location = world.getBlockAt(vec.x, world.getMaxHeight(), vec.z).getLocation().add(0.5, 0.0, 0.5);
+        if (random.nextInt(10) == 0) {
+            world.spawnEntity(location, EntityType.MINECART_TNT);
+        } else {
+            world.spawnFallingBlock(location, Material.FIRE.createBlockData());
         }
     }
 
