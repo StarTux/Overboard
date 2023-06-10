@@ -470,7 +470,7 @@ public final class OverboardPlugin extends JavaPlugin {
         player.setGameMode(GameMode.SPECTATOR);
         Pirate pirate = save.pirates.get(player.getUniqueId());
         if (pirate == null) return;
-        pirate.respawnCooldown = 200 + pirate.deaths * 100;
+        pirate.respawnCooldown = 200 + pirate.deaths * 200;
         pirate.deaths += 1;
     }
 
