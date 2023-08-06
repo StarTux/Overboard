@@ -2,6 +2,7 @@ package com.cavetale.overboard;
 
 import com.cavetale.core.event.hud.PlayerHudEvent;
 import com.cavetale.core.event.hud.PlayerHudPriority;
+import com.cavetale.core.event.player.PlayerTeamQuery;
 import com.cavetale.core.playercache.PlayerCache;
 import com.cavetale.core.struct.Vec3i;
 import java.util.ArrayList;
@@ -22,12 +23,15 @@ import org.bukkit.event.block.BlockBurnEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockFormEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerBucketFillEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
+import org.bukkit.inventory.ItemStack;
 import org.spigotmc.event.player.PlayerSpawnLocationEvent;
 import static com.cavetale.core.font.Unicode.tiny;
 import static net.kyori.adventure.text.Component.text;
@@ -102,18 +106,34 @@ public final class EventListener implements Listener {
         List<Component> lines = new ArrayList<>();
         lines.add(plugin.TITLE);
         if (plugin.save.state == State.GAME) {
+            Pirate pirate = plugin.save.pirates.get(event.getPlayer().getUniqueId());
+            if (plugin.save.useTeams && pirate.team != null) {
+                lines.add(textOfChildren(text(tiny("team "), GRAY), pirate.team.component));
+            }
             lines.add(textOfChildren(text(tiny("time"), GRAY), text(" " + plugin.timeString, AQUA)));
             lines.add(textOfChildren(text(tiny("fire spread"), GRAY), text(" x" + plugin.save.tickSpeed / 3, RED)));
             lines.add(textOfChildren(text(tiny("players"), GRAY), text(" " + plugin.playerCount, RED)));
-            Pirate pirate = plugin.save.pirates.get(event.getPlayer().getUniqueId());
             if (pirate != null) {
                 lines.add(textOfChildren(text(tiny("deaths"), GRAY), text(" " + pirate.deaths, RED)));
+                if (plugin.save.useTeams && pirate.team != null) {
+                    for (Pirate other : plugin.getTeamPirates(pirate.team)) {
+                        if (!other.playing || (other.dead && other.respawnCooldown > 0)) {
+                            lines.add(text(other.name, DARK_GRAY));
+                        } else if (other.dead) {
+                            lines.add(text(other.name, GRAY));
+                        } else {
+                            lines.add(text("\u2588 " + other.name, other.team.color));
+                        }
+                    }
+                }
             }
         } else if (plugin.save.state == State.WARMUP) {
             lines.add(textOfChildren(text(tiny("countdown"), GRAY), text(" " + plugin.timeString, AQUA)));
         } else if (plugin.save.state == State.END) {
-            if (plugin.save.winner != null) {
-                lines.add(textOfChildren(text(tiny("winner"), GRAY), text(" " + PlayerCache.nameForUuid(plugin.save.winner), GREEN)));
+            if (plugin.save.useTeams && plugin.save.winnerTeam != null) {
+                lines.add(textOfChildren(text(tiny("winner "), GRAY), plugin.save.winnerTeam.component));
+            } else if (plugin.save.winners != null && !plugin.save.winners.isEmpty()) {
+                lines.add(textOfChildren(text(tiny("winner"), GRAY), text(" " + PlayerCache.nameForUuid(plugin.save.winners.get(0)), GREEN)));
             } else {
                 lines.add(text("draw!", DARK_RED, BOLD));
             }
@@ -139,6 +159,19 @@ public final class EventListener implements Listener {
             break;
         default: break;
         }
+    }
+
+    @EventHandler
+    private void onFriendlyFire(EntityDamageByEntityEvent event) {
+        if (!plugin.isGameWorld(event.getEntity().getWorld())) return;
+        if (!plugin.save.useTeams) return;
+        if (!(event.getEntity() instanceof Player damaged)) return;
+        if (!(event.getDamager() instanceof Player damager)) return;
+        Pirate a = plugin.save.pirates.get(damaged.getUniqueId());
+        if (a == null || !a.playing || a.team == null) return;
+        Pirate b = plugin.save.pirates.get(damager.getUniqueId());
+        if (b == null || !b.playing || b.team == null) return;
+        if (a.team == b.team) event.setCancelled(true);
     }
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGH)
@@ -243,5 +276,66 @@ public final class EventListener implements Listener {
         final boolean fire = true;
         final boolean breakBlocks = true;
         plugin.world.createExplosion(event.getBlock().getLocation().add(0.5, 0.5, 0.5), strength, fire, breakBlocks);
+    }
+
+    @EventHandler
+    private void onPlayerTeam(PlayerTeamQuery query) {
+        if (!plugin.save.useTeams) return;
+        if (plugin.save.state == State.IDLE) return;
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            Pirate pirate = plugin.save.pirates.get(player.getUniqueId());
+            if (pirate == null || pirate.team == null) continue;
+            query.setTeam(player, pirate.team.queryTeam);
+        }
+    }
+
+    @EventHandler
+    private void onPlayerUseItem(PlayerInteractEvent event) {
+        if (plugin.save.state == State.IDLE) return;
+        final Player player = event.getPlayer();
+        if (!plugin.isGameWorld(player.getWorld())) return;
+        if (player.getGameMode() == GameMode.SPECTATOR) return;
+        switch (event.getAction()) {
+        case RIGHT_CLICK_BLOCK: case RIGHT_CLICK_AIR: break;
+        default: return;
+        }
+        if (!event.hasItem()) return;
+        ItemStack item = event.getItem();
+        if (item == null) return;
+        Pirate pirate = plugin.save.pirates.get(player.getUniqueId());
+        if (pirate == null) return;
+        switch (item.getType()) {
+        case TOTEM_OF_UNDYING: {
+            if (!plugin.save.useTeams || pirate.team == null) return;
+            Pirate thePirate = null;
+            Player thePlayer = null;
+            int chance = 1;
+            for (Pirate other : plugin.getTeamPirates(pirate.team)) {
+                if (other == pirate) continue;
+                if (!other.playing) continue;
+                Player otherPlayer = Bukkit.getPlayer(other.uuid);
+                if (otherPlayer == null) continue;
+                if (otherPlayer.getGameMode() != GameMode.SPECTATOR) continue;
+                if (plugin.random.nextInt(chance) > 0) continue;
+                thePirate = other;
+                thePlayer = otherPlayer;
+                chance += 1;
+            }
+            if (thePlayer == null || !plugin.respawnPlayer(thePlayer)) {
+                player.sendMessage(text("No player on your team is ready to respawn", RED));
+                return;
+            } else {
+                player.sendMessage(text("Player respawned: " + thePlayer.getName(), GREEN));
+            }
+            item.subtract(1);
+            event.setCancelled(true);
+            if (plugin.save.event) {
+                plugin.save.addScore(player.getUniqueId(), 1);
+                plugin.computeHighscores();
+            }
+            break;
+        }
+        default: break;
+        }
     }
 }

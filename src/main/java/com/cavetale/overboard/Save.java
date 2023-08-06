@@ -1,6 +1,7 @@
 package com.cavetale.overboard;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import lombok.Data;
@@ -9,7 +10,8 @@ import lombok.Data;
 public final class Save {
     // Debug
     protected State state = State.IDLE;
-    protected UUID winner;
+    protected List<UUID> winners = List.of();
+    protected PirateTeam winnerTeam;
     protected boolean debug;
     protected boolean event;
     protected String worldName;
@@ -21,6 +23,7 @@ public final class Save {
     protected int endTicks;
     protected int dropCooldown;
     protected int tickSpeed;
+    protected boolean useTeams = true;
 
     public void addScore(UUID uuid, int value) {
         int score = scores.getOrDefault(uuid, 0) + value;

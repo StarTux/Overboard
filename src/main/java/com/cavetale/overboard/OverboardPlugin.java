@@ -7,12 +7,16 @@ import com.cavetale.core.util.Json;
 import com.cavetale.fam.trophy.Highscore;
 import com.cavetale.mytems.Mytems;
 import com.cavetale.mytems.item.trophy.TrophyCategory;
+import com.cavetale.mytems.util.Items;
 import com.cavetale.overboard.world.Worlds;
+import com.winthier.title.TitlePlugin;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 import net.kyori.adventure.text.Component;
@@ -83,6 +87,9 @@ public final class OverboardPlugin extends JavaPlugin {
         if (world != null) {
             Worlds.deleteWorld(world);
             world = null;
+        }
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            TitlePlugin.getInstance().setColor(player, null);
         }
     }
 
@@ -169,7 +176,8 @@ public final class OverboardPlugin extends JavaPlugin {
             }
         }
         save.state = State.WARMUP;
-        save.winner = null;
+        save.winners = List.of();
+        save.winnerTeam = null;
         save.ticks = 0;
         save.warmupTicks = 0;
         save.gameTicks = 0;
@@ -185,7 +193,22 @@ public final class OverboardPlugin extends JavaPlugin {
         Pirate pirate = save.pirates.get(player.getUniqueId());
         if (pirate != null && pirate.playing) return;
         pirate = new Pirate();
+        pirate.uuid = player.getUniqueId();
+        pirate.name = player.getName();
         pirate.playing = true;
+        if (save.useTeams) {
+            int red = 0;
+            int blue = 0;
+            for (Pirate other : save.pirates.values()) {
+                if (other.team == PirateTeam.RED) {
+                    red += 1;
+                } else if (other.team == PirateTeam.BLUE) {
+                    blue += 1;
+                }
+            }
+            pirate.team = red < blue ? PirateTeam.RED : PirateTeam.BLUE;
+            TitlePlugin.getInstance().setColor(player, pirate.team.color);
+        }
         save.pirates.put(player.getUniqueId(), pirate);
         player.getInventory().clear();
         player.getInventory().setItem(0, Mytems.CAPTAINS_CUTLASS.createItemStack());
@@ -199,7 +222,7 @@ public final class OverboardPlugin extends JavaPlugin {
         player.setGameMode(GameMode.SURVIVAL);
     }
 
-    private boolean respawnPlayer(Player player) {
+    protected boolean respawnPlayer(Player player) {
         Pirate pirate = save.pirates.get(player.getUniqueId());
         if (pirate == null) return false;
         List<Vec3i> spawnLocations = findSpawnLocations();
@@ -209,6 +232,7 @@ public final class OverboardPlugin extends JavaPlugin {
         player.setHealth(20.0);
         player.setFireTicks(0);
         player.setGameMode(GameMode.SURVIVAL);
+        pirate.dead = false;
         return true;
     }
 
@@ -221,6 +245,7 @@ public final class OverboardPlugin extends JavaPlugin {
             player.setFoodLevel(20);
             player.setSaturation(20.0f);
             player.setFireTicks(0);
+            TitlePlugin.getInstance().setColor(player, null);
         }
         save.pirates.clear();
         save.state = State.IDLE;
@@ -310,12 +335,40 @@ public final class OverboardPlugin extends JavaPlugin {
         }
         List<Player> alive = getAlivePlayers();
         playerCount = alive.size();
-        if (!save.debug && alive.size() == 1) {
+        if (!save.debug && save.useTeams) {
+            Map<PirateTeam, Integer> aliveCounts = countAliveTeams();
+            if (aliveCounts.size() == 1) {
+                save.state = State.END;
+                save.winnerTeam = aliveCounts.keySet().iterator().next();
+                List<Pirate> winnerPirates = getTeamPirates(save.winnerTeam);
+                save.winners = new ArrayList<>();
+                List<String> names = new ArrayList<>();
+                for (Pirate pirate : winnerPirates) {
+                    save.winners.add(pirate.uuid);
+                    names.add(pirate.name);
+                    if (save.event) {
+                        save.addScore(pirate.uuid, 3);
+                        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "titles unlockset " + pirate.name + " Blackbeard Scalawag DavyJones");
+                    }
+                }
+                if (save.event) computeHighscores();
+                for (Player online : Bukkit.getOnlinePlayers()) {
+                    online.sendMessage(empty());
+                    online.sendMessage(textOfChildren(Mytems.CAPTAINS_CUTLASS, space(), text("Team ", WHITE), save.winnerTeam.component,
+                                                      text(" wins the game!", WHITE)));
+                    online.sendMessage(textOfChildren(Mytems.CAPTAINS_CUTLASS, space(), text(String.join(" ", names))));
+                    online.sendMessage(empty());
+                    online.playSound(online.getLocation(), Sound.ENTITY_ENDER_DRAGON_DEATH, SoundCategory.MASTER, 0.5f, 1.0f);
+                }
+                return;
+            }
+        }
+        if (!save.debug && !save.useTeams && alive.size() == 1) {
             save.state = State.END;
             Player winner = alive.get(0);
-            save.winner = winner.getUniqueId();
+            save.winners = List.of(winner.getUniqueId());
             if (save.event) {
-                save.addScore(winner.getUniqueId(), 1);
+                save.addScore(winner.getUniqueId(), 3);
                 computeHighscores();
                 Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "titles unlockset " + winner.getName() + " Blackbeard Scalawag DavyJones");
             }
@@ -325,15 +378,17 @@ public final class OverboardPlugin extends JavaPlugin {
                 online.sendMessage(empty());
                 online.playSound(online.getLocation(), Sound.ENTITY_ENDER_DRAGON_DEATH, SoundCategory.MASTER, 0.5f, 1.0f);
             }
+            return;
         } else if (!save.debug && alive.isEmpty()) {
             save.state = State.END;
-            save.winner = null;
+            save.winners = List.of();
             for (Player online : Bukkit.getOnlinePlayers()) {
                 online.sendMessage(empty());
                 online.sendMessage(textOfChildren(Mytems.CAPTAINS_CUTLASS, text(" The game ends in a draw!", DARK_RED)));
                 online.sendMessage(empty());
                 online.playSound(online.getLocation(), Sound.ENTITY_ENDER_DRAGON_DEATH, SoundCategory.MASTER, 0.5f, 1.0f);
             }
+            return;
         }
         if (save.dropCooldown <= 0) {
             drop();
@@ -371,6 +426,16 @@ public final class OverboardPlugin extends JavaPlugin {
                                                               new ItemStack(Material.ENDER_PEARL),
                                                               new ItemStack(Material.ENDER_PEARL, 2));
 
+    private static ItemStack totem() {
+        return Items.text(new ItemStack(Material.TOTEM_OF_UNDYING),
+                          List.of(text("Respawn Team Member", GREEN),
+                                  textOfChildren(Mytems.MOUSE_RIGHT, text(" activate", GRAY)),
+                                  text("Respawn a drowned team", GRAY),
+                                  text("member, provided their", GRAY),
+                                  text("respawn cooldown has", GRAY),
+                                  text("expired", GRAY)));
+    }
+
     private void drop() {
         List<Vec3i> vecs = new ArrayList<>();
         for (Area area : dropAreas) {
@@ -397,8 +462,12 @@ public final class OverboardPlugin extends JavaPlugin {
             world.spawnFallingBlock(location, Material.FIRE.createBlockData());
             break;
         default:
-            ItemStack item = DROP_ITEMS.get(random.nextInt(DROP_ITEMS.size()));
-            world.dropItem(location, item.clone());
+            if (save.useTeams && random.nextInt(DROP_ITEMS.size()) == 0) {
+                world.dropItem(location, totem());
+            } else {
+                ItemStack item = DROP_ITEMS.get(random.nextInt(DROP_ITEMS.size()));
+                world.dropItem(location, item.clone());
+            }
         }
     }
 
@@ -422,6 +491,7 @@ public final class OverboardPlugin extends JavaPlugin {
     private void tickGamePlayer(Player player, Pirate pirate) {
         if (player.getGameMode() == GameMode.SPECTATOR) {
             if (pirate.respawnCooldown <= 0) {
+                if (save.useTeams) return;
                 if (!respawnPlayer(player)) {
                     pirate.playing = false;
                     player.sendMessage(textOfChildren(Mytems.CAPTAINS_CUTLASS, text(" You could not be respawned and are out of the game", RED)));
@@ -430,7 +500,9 @@ public final class OverboardPlugin extends JavaPlugin {
                 return;
             } else {
                 pirate.respawnCooldown -= 1;
-                if (pirate.respawnCooldown > 0 && (pirate.respawnCooldown % 20) == 0) {
+                if (pirate.respawnCooldown == 0) {
+                    player.sendActionBar(empty());
+                } else if (pirate.respawnCooldown > 0 && (pirate.respawnCooldown % 20) == 0) {
                     int seconds = pirate.respawnCooldown / 20;
                     player.sendActionBar(text("Respawn in " + seconds, GREEN));
                 }
@@ -470,6 +542,7 @@ public final class OverboardPlugin extends JavaPlugin {
         player.setGameMode(GameMode.SPECTATOR);
         Pirate pirate = save.pirates.get(player.getUniqueId());
         if (pirate == null) return;
+        pirate.dead = true;
         pirate.respawnCooldown = 200 + pirate.deaths * 200;
         pirate.deaths += 1;
     }
@@ -483,6 +556,35 @@ public final class OverboardPlugin extends JavaPlugin {
             Pirate pirate = save.pirates.get(player.getUniqueId());
             if (pirate == null || !pirate.playing) continue;
             result.add(player);
+        }
+        return result;
+    }
+
+    protected Map<PirateTeam, Integer> countAliveTeams() {
+        Map<PirateTeam, Integer> result = new EnumMap<>(PirateTeam.class);
+        for (Player p : getAlivePlayers()) {
+            Pirate pirate = save.pirates.get(p.getUniqueId());
+            if (pirate.team == null) continue;
+            result.put(pirate.team, result.getOrDefault(pirate.team, 0) + 1);
+        }
+        return result;
+    }
+
+    protected List<Player> getTeamPlayers(PirateTeam team) {
+        List<Player> result = new ArrayList<>();
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            Pirate pirate = save.pirates.get(p.getUniqueId());
+            if (pirate == null || pirate.team != team) continue;
+            result.add(p);
+        }
+        return result;
+    }
+
+    protected List<Pirate> getTeamPirates(PirateTeam team) {
+        List<Pirate> result = new ArrayList<>();
+        for (Pirate p : save.pirates.values()) {
+            if (p.team != team) continue;
+            result.add(p);
         }
         return result;
     }
