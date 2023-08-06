@@ -191,7 +191,12 @@ public final class OverboardPlugin extends JavaPlugin {
      */
     public void startPlayer(Player player) {
         Pirate pirate = save.pirates.get(player.getUniqueId());
-        if (pirate != null && pirate.playing) return;
+        if (pirate != null && pirate.playing) {
+            if (save.useTeams && pirate.team != null) {
+                TitlePlugin.getInstance().setColor(player, pirate.team.color);
+            }
+            return;
+        }
         pirate = new Pirate();
         pirate.uuid = player.getUniqueId();
         pirate.name = player.getName();
@@ -233,6 +238,23 @@ public final class OverboardPlugin extends JavaPlugin {
         player.setFireTicks(0);
         player.setGameMode(GameMode.SURVIVAL);
         pirate.dead = false;
+        if (save.useTeams && pirate.team != null) {
+            TitlePlugin.getInstance().setColor(player, pirate.team.color);
+        }
+        return true;
+    }
+
+    protected boolean respawnPlayer(Player player, Location location) {
+        Pirate pirate = save.pirates.get(player.getUniqueId());
+        if (pirate == null) return false;
+        player.teleport(location);
+        player.setHealth(20.0);
+        player.setFireTicks(0);
+        player.setGameMode(GameMode.SURVIVAL);
+        pirate.dead = false;
+        if (save.useTeams && pirate.team != null) {
+            TitlePlugin.getInstance().setColor(player, pirate.team.color);
+        }
         return true;
     }
 
@@ -399,7 +421,7 @@ public final class OverboardPlugin extends JavaPlugin {
         } else {
             save.dropCooldown -= 1;
         }
-        if (save.gameTicks % 200 == 0) {
+        if (save.gameTicks % 600 == 0) {
             world.setGameRule(GameRule.RANDOM_TICK_SPEED, save.tickSpeed);
             save.tickSpeed += 1;
         }
@@ -415,14 +437,13 @@ public final class OverboardPlugin extends JavaPlugin {
                                                               new ItemStack(Material.SHEARS),
                                                               new ItemStack(Material.APPLE, 4),
                                                               new ItemStack(Material.APPLE, 8),
-                                                              new ItemStack(Material.APPLE, 12),
                                                               new ItemStack(Material.BREAD, 4),
                                                               new ItemStack(Material.BREAD, 8),
-                                                              new ItemStack(Material.BREAD, 12),
                                                               new ItemStack(Material.ELYTRA),
                                                               new ItemStack(Material.LAVA_BUCKET),
                                                               new ItemStack(Material.BUCKET),
                                                               new ItemStack(Material.FIRE_CHARGE),
+                                                              new ItemStack(Material.LADDER, 16),
                                                               new ItemStack(Material.ENDER_PEARL),
                                                               new ItemStack(Material.ENDER_PEARL, 2));
 
@@ -431,9 +452,7 @@ public final class OverboardPlugin extends JavaPlugin {
                           List.of(text("Respawn Team Member", GREEN),
                                   textOfChildren(Mytems.MOUSE_RIGHT, text(" activate", GRAY)),
                                   text("Respawn a drowned team", GRAY),
-                                  text("member, provided their", GRAY),
-                                  text("respawn cooldown has", GRAY),
-                                  text("expired", GRAY)));
+                                  text("member.", GRAY)));
     }
 
     private void drop() {
@@ -449,25 +468,28 @@ public final class OverboardPlugin extends JavaPlugin {
         if (vecs.isEmpty()) return;
         Vec3i vec = vecs.get(random.nextInt(vecs.size()));
         Location location = world.getBlockAt(vec.x, world.getMaxHeight(), vec.z).getLocation().add(0.5, 0.0, 0.5);
-        switch (random.nextInt(10)) {
+        switch (random.nextInt(20)) {
         case 0:
+            if (save.gameTicks < 20 * 60 * 5) return;
             world.spawnEntity(location, EntityType.MINECART_TNT);
             break;
         case 1:
+            if (save.gameTicks < 20 * 60 * 4) return;
             world.strikeLightning(vec.toCenterFloorLocation(world));
             break;
         case 2:
         case 3:
-        case 4:
+            if (save.gameTicks < 20 * 60 * 2) return;
             world.spawnFallingBlock(location, Material.FIRE.createBlockData());
             break;
+        case 4:
+        case 5:
+        case 6:
+            world.dropItem(location, totem());
+            break;
         default:
-            if (save.useTeams && random.nextInt(DROP_ITEMS.size()) == 0) {
-                world.dropItem(location, totem());
-            } else {
-                ItemStack item = DROP_ITEMS.get(random.nextInt(DROP_ITEMS.size()));
-                world.dropItem(location, item.clone());
-            }
+            ItemStack item = DROP_ITEMS.get(random.nextInt(DROP_ITEMS.size()));
+            world.dropItem(location, item.clone());
         }
     }
 
@@ -491,7 +513,6 @@ public final class OverboardPlugin extends JavaPlugin {
     private void tickGamePlayer(Player player, Pirate pirate) {
         if (player.getGameMode() == GameMode.SPECTATOR) {
             if (pirate.respawnCooldown <= 0) {
-                if (save.useTeams) return;
                 if (!respawnPlayer(player)) {
                     pirate.playing = false;
                     player.sendMessage(textOfChildren(Mytems.CAPTAINS_CUTLASS, text(" You could not be respawned and are out of the game", RED)));
@@ -543,7 +564,10 @@ public final class OverboardPlugin extends JavaPlugin {
         Pirate pirate = save.pirates.get(player.getUniqueId());
         if (pirate == null) return;
         pirate.dead = true;
-        pirate.respawnCooldown = 200 + pirate.deaths * 200;
+        pirate.respawnCooldown = 100;
+        for (int i = 0; i < pirate.deaths; i += 1) {
+            pirate.respawnCooldown *= 2;
+        }
         pirate.deaths += 1;
     }
 

@@ -5,8 +5,10 @@ import com.cavetale.core.event.hud.PlayerHudPriority;
 import com.cavetale.core.event.player.PlayerTeamQuery;
 import com.cavetale.core.playercache.PlayerCache;
 import com.cavetale.core.struct.Vec3i;
+import com.cavetale.mytems.Mytems;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
@@ -105,29 +107,42 @@ public final class EventListener implements Listener {
     private void onPlayerHud(PlayerHudEvent event) {
         List<Component> lines = new ArrayList<>();
         lines.add(plugin.TITLE);
-        if (plugin.save.state == State.GAME) {
-            Pirate pirate = plugin.save.pirates.get(event.getPlayer().getUniqueId());
+        Pirate pirate = plugin.save.pirates.get(event.getPlayer().getUniqueId());
+        if (plugin.save.state == State.WARMUP || plugin.save.state == State.GAME) {
             if (plugin.save.useTeams && pirate.team != null) {
                 lines.add(textOfChildren(text(tiny("team "), GRAY), pirate.team.component));
             }
+        }
+        if (plugin.save.state == State.GAME) {
             lines.add(textOfChildren(text(tiny("time"), GRAY), text(" " + plugin.timeString, AQUA)));
             lines.add(textOfChildren(text(tiny("fire spread"), GRAY), text(" x" + plugin.save.tickSpeed / 3, RED)));
-            lines.add(textOfChildren(text(tiny("players"), GRAY), text(" " + plugin.playerCount, RED)));
+            if (plugin.save.useTeams) {
+                Map<PirateTeam, Integer> aliveTeams = plugin.countAliveTeams();
+                for (PirateTeam team : PirateTeam.values()) {
+                    lines.add(textOfChildren(text(tiny(team.key.toLowerCase()), GRAY), text(" " + aliveTeams.getOrDefault(team, 0), team.color)));
+                }
+            } else {
+                lines.add(textOfChildren(text(tiny("players"), GRAY), text(" " + plugin.playerCount, RED)));
+            }
+        }
+        if (plugin.save.state == State.WARMUP || plugin.save.state == State.GAME) {
             if (pirate != null) {
                 lines.add(textOfChildren(text(tiny("deaths"), GRAY), text(" " + pirate.deaths, RED)));
                 if (plugin.save.useTeams && pirate.team != null) {
                     for (Pirate other : plugin.getTeamPirates(pirate.team)) {
+                        String dname = "\u2588 " + other.name;
                         if (!other.playing || (other.dead && other.respawnCooldown > 0)) {
-                            lines.add(text(other.name, DARK_GRAY));
+                            lines.add(text(dname, DARK_GRAY));
                         } else if (other.dead) {
-                            lines.add(text(other.name, GRAY));
+                            lines.add(text(dname, GRAY));
                         } else {
-                            lines.add(text("\u2588 " + other.name, other.team.color));
+                            lines.add(text(dname, other.team.color));
                         }
                     }
                 }
             }
-        } else if (plugin.save.state == State.WARMUP) {
+        }
+        if (plugin.save.state == State.WARMUP) {
             lines.add(textOfChildren(text(tiny("countdown"), GRAY), text(" " + plugin.timeString, AQUA)));
         } else if (plugin.save.state == State.END) {
             if (plugin.save.useTeams && plugin.save.winnerTeam != null) {
@@ -186,7 +201,8 @@ public final class EventListener implements Listener {
             event.setCancelled(true);
         } else if (plugin.isDeathArea(vec)) {
             event.setCancelled(true);
-        } else if (event.getBlock().getType() == Material.TNT) {
+        }
+        if (event.getBlock().getType() == Material.TNT) {
             Block block = event.getBlock();
             Bukkit.getScheduler().runTask(plugin, () -> {
                     if (block.getType() != Material.TNT) return;
@@ -194,6 +210,10 @@ public final class EventListener implements Listener {
                     tnt.setUnstable(true);
                     block.setBlockData(tnt);
                 });
+        } else if (event.getBlock().getType() == Material.FIRE || event.getBlock().getType() == Material.LADDER) {
+            return;
+        } else {
+            event.setCancelled(true);
         }
     }
 
@@ -272,9 +292,10 @@ public final class EventListener implements Listener {
     private void onBlockBurn(BlockBurnEvent event) {
         if (!plugin.isGameWorld(event.getBlock().getWorld())) return;
         if (plugin.random.nextInt(5) > 0) return;
-        final float strength = 4f;
-        final boolean fire = true;
+        final float strength = 2f;
+        final boolean fire = false;
         final boolean breakBlocks = true;
+        if (plugin.random.nextInt(4) == 0) return;
         plugin.world.createExplosion(event.getBlock().getLocation().add(0.5, 0.5, 0.5), strength, fire, breakBlocks);
     }
 
@@ -291,7 +312,7 @@ public final class EventListener implements Listener {
 
     @EventHandler
     private void onPlayerUseItem(PlayerInteractEvent event) {
-        if (plugin.save.state == State.IDLE) return;
+        if (plugin.save.state != State.GAME) return;
         final Player player = event.getPlayer();
         if (!plugin.isGameWorld(player.getWorld())) return;
         if (player.getGameMode() == GameMode.SPECTATOR) return;
@@ -321,11 +342,13 @@ public final class EventListener implements Listener {
                 thePlayer = otherPlayer;
                 chance += 1;
             }
-            if (thePlayer == null || !plugin.respawnPlayer(thePlayer)) {
+            if (thePlayer == null || !plugin.respawnPlayer(thePlayer, player.getLocation())) {
                 player.sendMessage(text("No player on your team is ready to respawn", RED));
                 return;
             } else {
-                player.sendMessage(text("Player respawned: " + thePlayer.getName(), GREEN));
+                for (Player other : Bukkit.getOnlinePlayers()) {
+                    other.sendMessage(textOfChildren(Mytems.BLUNDERBUSS, text(" " + player.getName() + " respawned " + thePlayer.getName() + " for team " + pirate.team.key, pirate.team.color)));
+                }
             }
             item.subtract(1);
             event.setCancelled(true);
