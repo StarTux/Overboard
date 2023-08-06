@@ -439,13 +439,12 @@ public final class OverboardPlugin extends JavaPlugin {
                                                               new ItemStack(Material.APPLE, 8),
                                                               new ItemStack(Material.BREAD, 4),
                                                               new ItemStack(Material.BREAD, 8),
-                                                              new ItemStack(Material.ELYTRA),
                                                               new ItemStack(Material.LAVA_BUCKET),
-                                                              new ItemStack(Material.BUCKET),
                                                               new ItemStack(Material.FIRE_CHARGE),
                                                               new ItemStack(Material.LADDER, 16),
                                                               new ItemStack(Material.ENDER_PEARL),
-                                                              new ItemStack(Material.ENDER_PEARL, 2));
+                                                              new ItemStack(Material.ENDER_PEARL, 2),
+                                                              new ItemStack(Material.SPYGLASS));
 
     private static ItemStack totem() {
         return Items.text(new ItemStack(Material.TOTEM_OF_UNDYING),
@@ -468,7 +467,7 @@ public final class OverboardPlugin extends JavaPlugin {
         if (vecs.isEmpty()) return;
         Vec3i vec = vecs.get(random.nextInt(vecs.size()));
         Location location = world.getBlockAt(vec.x, world.getMaxHeight(), vec.z).getLocation().add(0.5, 0.0, 0.5);
-        switch (random.nextInt(20)) {
+        switch (random.nextInt(30)) {
         case 0:
             if (save.gameTicks < 20 * 60 * 5) return;
             world.spawnEntity(location, EntityType.MINECART_TNT);
@@ -485,6 +484,8 @@ public final class OverboardPlugin extends JavaPlugin {
         case 4:
         case 5:
         case 6:
+        case 7:
+        case 8:
             world.dropItem(location, totem());
             break;
         default:
