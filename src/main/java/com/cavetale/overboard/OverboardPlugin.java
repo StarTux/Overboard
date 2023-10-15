@@ -21,6 +21,7 @@ import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
+import org.bukkit.Color;
 import org.bukkit.Difficulty;
 import org.bukkit.GameMode;
 import org.bukkit.GameRule;
@@ -31,9 +32,11 @@ import org.bukkit.Sound;
 import org.bukkit.SoundCategory;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.LeatherArmorMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.util.BoundingBox;
 import static net.kyori.adventure.text.Component.empty;
@@ -220,11 +223,28 @@ public final class OverboardPlugin extends JavaPlugin {
         player.getInventory().setItem(1, Mytems.BLUNDERBUSS.createItemStack());
         player.getInventory().setItem(8, new ItemStack(Material.APPLE, 12));
         player.getInventory().setHelmet(Mytems.PIRATE_HAT.createItemStack());
+        if (save.useTeams) {
+            player.getInventory().setChestplate(makeColoredArmor(Material.LEATHER_CHESTPLATE, pirate.team));
+            player.getInventory().setLeggings(makeColoredArmor(Material.LEATHER_LEGGINGS, pirate.team));
+            player.getInventory().setBoots(makeColoredArmor(Material.LEATHER_BOOTS, pirate.team));
+        }
         player.setHealth(20.0);
         player.setFoodLevel(20);
         player.setSaturation(20.0f);
         player.setFireTicks(0);
         player.setGameMode(GameMode.SURVIVAL);
+    }
+
+    private ItemStack makeColoredArmor(Material material, PirateTeam team) {
+        ItemStack item = new ItemStack(material);
+        item.editMeta(m -> {
+                if (m instanceof LeatherArmorMeta meta) {
+                    meta.setColor(Color.fromRGB(team.color.value() & 0xFFFFFF));
+                    meta.setUnbreakable(true);
+                    meta.addEnchant(Enchantment.BINDING_CURSE, 1, true);
+                }
+            });
+        return item;
     }
 
     protected boolean respawnPlayer(Player player) {

@@ -347,7 +347,9 @@ public final class EventListener implements Listener {
                 return;
             } else {
                 for (Player other : Bukkit.getOnlinePlayers()) {
-                    other.sendMessage(textOfChildren(Mytems.BLUNDERBUSS, text(" " + player.getName() + " respawned " + thePlayer.getName() + " for team " + pirate.team.key, pirate.team.color)));
+                    other.sendMessage(textOfChildren(Mytems.BLUNDERBUSS,
+                                                     text(" " + player.getName() + " respawned " + thePlayer.getName()
+                                                          + " for team " + pirate.team.key, pirate.team.color)));
                 }
             }
             item.subtract(1);
