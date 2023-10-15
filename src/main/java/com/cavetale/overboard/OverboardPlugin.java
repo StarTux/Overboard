@@ -64,6 +64,9 @@ public final class OverboardPlugin extends JavaPlugin {
     protected static final Component TITLE = textOfChildren(Mytems.CAPTAINS_CUTLASS, text("Overboard!", DARK_RED));
     protected String timeString;
     protected int playerCount;
+    // Spawn
+    private List<Vec3i> spawnLocations = List.of();
+    private int nextSpawnLocationIndex = 0;
 
     public OverboardPlugin() {
         instance = this;
@@ -157,9 +160,8 @@ public final class OverboardPlugin extends JavaPlugin {
         world.setGameRule(GameRule.MOB_GRIEFING, true);
         world.setDifficulty(Difficulty.PEACEFUL);
         // Spawns
-        List<Vec3i> spawnLocations = findSpawnLocations();
+        spawnLocations = findSpawnLocations();
         Collections.shuffle(spawnLocations);
-        int nextSpawnLocationIndex = 0;
         // Players
         List<Player> players = new ArrayList<>();
         for (Player player : Bukkit.getOnlinePlayers()) {
@@ -171,12 +173,6 @@ public final class OverboardPlugin extends JavaPlugin {
         save.pirates.clear();
         for (Player player : players) {
             startPlayer(player);
-            Pirate pirate = save.pirates.get(player.getUniqueId());
-            pirate.spawnLocation = spawnLocations.get(nextSpawnLocationIndex++ % spawnLocations.size());
-            player.teleport(pirate.spawnLocation.toCenterFloorLocation(world));
-            if (save.event) {
-                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "ml add " + player.getName());
-            }
         }
         save.state = State.WARMUP;
         save.winners = List.of();
@@ -233,6 +229,11 @@ public final class OverboardPlugin extends JavaPlugin {
         player.setSaturation(20.0f);
         player.setFireTicks(0);
         player.setGameMode(GameMode.SURVIVAL);
+        pirate.spawnLocation = spawnLocations.get(nextSpawnLocationIndex++ % spawnLocations.size());
+        player.teleport(pirate.spawnLocation.toCenterFloorLocation(world));
+        if (save.event) {
+            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "ml add " + player.getName());
+        }
     }
 
     private ItemStack makeColoredArmor(Material material, PirateTeam team) {
@@ -250,9 +251,9 @@ public final class OverboardPlugin extends JavaPlugin {
     protected boolean respawnPlayer(Player player) {
         Pirate pirate = save.pirates.get(player.getUniqueId());
         if (pirate == null) return false;
-        List<Vec3i> spawnLocations = findSpawnLocations();
-        if (spawnLocations.isEmpty()) return false;
-        pirate.spawnLocation = spawnLocations.get(random.nextInt(spawnLocations.size()));
+        List<Vec3i> respawnLocations = findSpawnLocations();
+        if (respawnLocations.isEmpty()) return false;
+        pirate.spawnLocation = respawnLocations.get(random.nextInt(respawnLocations.size()));
         player.teleport(pirate.spawnLocation.toCenterFloorLocation(world));
         player.setHealth(20.0);
         player.setFireTicks(0);

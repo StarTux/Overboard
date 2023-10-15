@@ -89,18 +89,13 @@ public final class EventListener implements Listener {
             player.setFireTicks(0);
         } else {
             Bukkit.getScheduler().runTask(plugin, () -> {
-                    List<Vec3i> spawnLocations = plugin.findSpawnLocations();
-                    if (spawnLocations.isEmpty()) return;
                     plugin.startPlayer(player);
-                    Pirate pirate = plugin.save.pirates.get(player.getUniqueId());
-                    pirate.spawnLocation = spawnLocations.get(plugin.random.nextInt(spawnLocations.size()));
-                    player.teleport(pirate.spawnLocation.toCenterFloorLocation(plugin.world));
                 });
         }
     }
 
     @EventHandler
-    private  void onPlayerQuit(PlayerJoinEvent event) {
+    private void onPlayerQuit(PlayerJoinEvent event) {
     }
 
     @EventHandler
