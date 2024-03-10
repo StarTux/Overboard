@@ -2,6 +2,7 @@ package com.cavetale.overboard;
 
 import com.cavetale.core.event.hud.PlayerHudEvent;
 import com.cavetale.core.event.hud.PlayerHudPriority;
+import com.cavetale.core.event.player.PlayerTPAEvent;
 import com.cavetale.core.event.player.PlayerTeamQuery;
 import com.cavetale.core.playercache.PlayerCache;
 import com.cavetale.core.struct.Vec3i;
@@ -359,5 +360,9 @@ public final class EventListener implements Listener {
         }
         default: break;
         }
+    }
+
+    private void onPlayerTPA(PlayerTPAEvent event) {
+        event.setCancelled(true);
     }
 }
