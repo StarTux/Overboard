@@ -60,7 +60,7 @@ public final class OverboardCommand implements TabExecutor {
                                          "overboard",
                                          TrophyCategory.SWORD,
                                          plugin.TITLE,
-                                         hi -> "You won " + hi.score + " time" + (hi.score == 1 ? "" : "s"));
+                                         hi -> "You scored " + hi.score + " point" + (hi.score == 1 ? "" : "s"));
             sender.sendMessage(text("Rewarded " + count + " players!", YELLOW));
             return true;
         }
