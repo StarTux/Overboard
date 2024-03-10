@@ -15,6 +15,7 @@ public final class Pirate {
     protected int deaths;
     protected PirateTeam team;
     protected boolean dead;
+    protected int money;
 
     public Pirate() { }
 }

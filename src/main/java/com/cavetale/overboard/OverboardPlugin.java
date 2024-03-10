@@ -2,6 +2,7 @@ package com.cavetale.overboard;
 
 import com.cavetale.area.struct.Area;
 import com.cavetale.area.struct.AreasFile;
+import com.cavetale.core.money.Money;
 import com.cavetale.core.struct.Vec3i;
 import com.cavetale.core.util.Json;
 import com.cavetale.fam.trophy.Highscore;
@@ -406,6 +407,7 @@ public final class OverboardPlugin extends JavaPlugin {
                     names.add(pirate.name);
                     if (save.event) {
                         save.addScore(pirate.uuid, 3);
+                        pirate.money += 5000;
                         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "titles unlockset " + pirate.name + " Blackbeard Scalawag DavyJones");
                     }
                 }
@@ -418,15 +420,18 @@ public final class OverboardPlugin extends JavaPlugin {
                     online.sendMessage(empty());
                     online.playSound(online.getLocation(), Sound.ENTITY_ENDER_DRAGON_DEATH, SoundCategory.MASTER, 0.5f, 1.0f);
                 }
+                if (save.event) giveMoney();
                 return;
             }
         }
         if (!save.debug && !save.useTeams && alive.size() == 1) {
             save.state = State.END;
-            Player winner = alive.get(0);
+            final Player winner = alive.get(0);
+            final Pirate pirate = save.pirates.get(winner.getUniqueId());
             save.winners = List.of(winner.getUniqueId());
             if (save.event) {
                 save.addScore(winner.getUniqueId(), 3);
+                if (pirate != null) pirate.money += 5000;
                 computeHighscores();
                 Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "titles unlockset " + winner.getName() + " Blackbeard Scalawag DavyJones");
             }
@@ -436,6 +441,7 @@ public final class OverboardPlugin extends JavaPlugin {
                 online.sendMessage(empty());
                 online.playSound(online.getLocation(), Sound.ENTITY_ENDER_DRAGON_DEATH, SoundCategory.MASTER, 0.5f, 1.0f);
             }
+            if (save.event) giveMoney();
             return;
         } else if (!save.debug && alive.isEmpty()) {
             save.state = State.END;
@@ -446,6 +452,7 @@ public final class OverboardPlugin extends JavaPlugin {
                 online.sendMessage(empty());
                 online.playSound(online.getLocation(), Sound.ENTITY_ENDER_DRAGON_DEATH, SoundCategory.MASTER, 0.5f, 1.0f);
             }
+            if (save.event) giveMoney();
             return;
         }
         if (save.dropCooldown <= 0) {
@@ -504,6 +511,15 @@ public final class OverboardPlugin extends JavaPlugin {
         }
         // Game Ticks
         save.gameTicks += 1;
+    }
+
+    private void giveMoney() {
+        if (!save.event) return;
+        for (Pirate pirate : save.pirates.values()) {
+            if (pirate.money == 0) continue;
+            Money.get().give(pirate.uuid, (double) pirate.money, this, "Overboard!");
+            pirate.money = 0;
+        }
     }
 
     private static final List<ItemStack> DROP_ITEMS = List.of(new ItemStack(Material.FLINT_AND_STEEL),

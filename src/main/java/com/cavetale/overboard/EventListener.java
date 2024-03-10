@@ -352,6 +352,7 @@ public final class EventListener implements Listener {
             event.setCancelled(true);
             if (plugin.save.event) {
                 plugin.save.addScore(player.getUniqueId(), 1);
+                pirate.money += 500;
                 plugin.computeHighscores();
             }
             break;
