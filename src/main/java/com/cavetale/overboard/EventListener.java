@@ -103,18 +103,17 @@ public final class EventListener implements Listener {
         List<Component> lines = new ArrayList<>();
         lines.add(plugin.TITLE);
         Pirate pirate = plugin.save.pirates.get(event.getPlayer().getUniqueId());
-        if (plugin.save.state == State.WARMUP || plugin.save.state == State.GAME) {
-            if (plugin.save.useTeams && pirate.team != null) {
-                lines.add(textOfChildren(text(tiny("team "), GRAY), pirate.team.component));
-            }
-        }
         if (plugin.save.state == State.GAME) {
             lines.add(textOfChildren(text(tiny("time"), GRAY), text(" " + plugin.timeString, AQUA)));
+            lines.add(textOfChildren(text(tiny("sinking"), GRAY), text(" " + (plugin.save.floodCooldown / 20), BLUE)));
             lines.add(textOfChildren(text(tiny("fire spread"), GRAY), text(" x" + plugin.save.tickSpeed / 3, RED)));
+            if (pirate != null) {
+                lines.add(textOfChildren(text(tiny("deaths"), GRAY), text(" " + pirate.deaths, RED)));
+            }
             if (plugin.save.useTeams) {
                 Map<PirateTeam, Integer> aliveTeams = plugin.countAliveTeams();
                 for (PirateTeam team : PirateTeam.values()) {
-                    lines.add(textOfChildren(text(tiny(team.key.toLowerCase()), GRAY), text(" " + aliveTeams.getOrDefault(team, 0), team.color)));
+                    lines.add(textOfChildren(text(tiny(team.key.toLowerCase()), team.color), text(" " + aliveTeams.getOrDefault(team, 0), team.color)));
                 }
             } else {
                 lines.add(textOfChildren(text(tiny("players"), GRAY), text(" " + plugin.playerCount, RED)));
@@ -122,7 +121,9 @@ public final class EventListener implements Listener {
         }
         if (plugin.save.state == State.WARMUP || plugin.save.state == State.GAME) {
             if (pirate != null) {
-                lines.add(textOfChildren(text(tiny("deaths"), GRAY), text(" " + pirate.deaths, RED)));
+                if (plugin.save.useTeams && pirate.team != null) {
+                    lines.add(textOfChildren(text(tiny("team "), pirate.team.color), pirate.team.component));
+                }
                 if (plugin.save.useTeams && pirate.team != null) {
                     for (Pirate other : plugin.getTeamPirates(pirate.team)) {
                         String dname = "\u2588 " + other.name;
@@ -286,12 +287,12 @@ public final class EventListener implements Listener {
     @EventHandler
     private void onBlockBurn(BlockBurnEvent event) {
         if (!plugin.isGameWorld(event.getBlock().getWorld())) return;
-        if (plugin.random.nextInt(5) > 0) return;
+        if (plugin.save.explosionCountdown > 0) return;
         final float strength = 2f;
         final boolean fire = false;
         final boolean breakBlocks = true;
-        if (plugin.random.nextInt(4) == 0) return;
         plugin.world.createExplosion(event.getBlock().getLocation().add(0.5, 0.5, 0.5), strength, fire, breakBlocks);
+        plugin.save.explosionCountdown = 400;
     }
 
     @EventHandler

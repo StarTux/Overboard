@@ -32,8 +32,8 @@ import org.bukkit.Sound;
 import org.bukkit.SoundCategory;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.data.Waterlogged;
 import org.bukkit.enchantments.Enchantment;
-import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.LeatherArmorMeta;
@@ -48,6 +48,7 @@ import static net.kyori.adventure.title.Title.title;
 
 public final class OverboardPlugin extends JavaPlugin {
     private static OverboardPlugin instance;
+    private static final int FLOOD_COOLDOWN = 20 * 60;
     protected final OverboardCommand overboardCommand = new OverboardCommand(this);
     protected final EventListener eventListener = new EventListener(this);
     protected final Random random = ThreadLocalRandom.current();
@@ -162,6 +163,18 @@ public final class OverboardPlugin extends JavaPlugin {
         // Spawns
         spawnLocations = findSpawnLocations();
         Collections.shuffle(spawnLocations);
+        //
+        save.waterLevel = world.getMinHeight();
+        for (var gameArea : gameAreas) {
+            for (var vec : gameArea.enumerate()) {
+                final var block = vec.toBlock(world);
+                if (block.getType() == Material.WATER) {
+                    if (save.waterLevel < block.getY()) {
+                        save.waterLevel = block.getY();
+                    }
+                }
+            }
+        }
         // Players
         List<Player> players = new ArrayList<>();
         for (Player player : Bukkit.getOnlinePlayers()) {
@@ -182,6 +195,8 @@ public final class OverboardPlugin extends JavaPlugin {
         save.gameTicks = 0;
         save.endTicks = 0;
         save.tickSpeed = 0;
+        save.floodCooldown = FLOOD_COOLDOWN;
+        save.nextFloodCooldown = FLOOD_COOLDOWN - 20;
     }
 
     /**
@@ -449,6 +464,45 @@ public final class OverboardPlugin extends JavaPlugin {
         int seconds = save.gameTicks / 20;
         int minutes = seconds / 60;
         timeString = minutes + "m " + (seconds % 60) + "s";
+        // Flood
+        if (save.floodCooldown > 0) {
+            save.floodCooldown -= 1;
+        } else {
+            save.floodCooldown = save.nextFloodCooldown;
+            save.nextFloodCooldown -= 100;
+            if (save.nextFloodCooldown < 100) {
+                save.nextFloodCooldown = 100;
+            }
+            save.waterLevel += 1;
+            for (var gameArea : gameAreas) {
+                if (save.waterLevel >= gameArea.max.y) continue;
+                for (int z = gameArea.min.z; z <= gameArea.max.z; z += 1) {
+                    for (int x = gameArea.min.x; x <= gameArea.max.x; x += 1) {
+                        final var block = world.getBlockAt(x, save.waterLevel, z);
+                        if (block.getType() == Material.WATER) {
+                            continue;
+                        } else if (block.getType() == Material.LAVA) {
+                            block.setBlockData(Material.WATER.createBlockData(), false);
+                        } else if (block.isEmpty()) {
+                            block.setBlockData(Material.WATER.createBlockData(), false);
+                        } else if (block.getBlockData() instanceof Waterlogged waterlogged) {
+                            waterlogged.setWaterlogged(true);
+                            block.setBlockData(waterlogged, false);
+                        } else if (block.getCollisionShape().getBoundingBoxes().isEmpty()) {
+                            block.setBlockData(Material.WATER.createBlockData(), false);
+                        }
+                    }
+                }
+            }
+            for (var player : world.getPlayers()) {
+                player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_SPLASH_HIGH_SPEED, 1.0f, 1.0f);
+            }
+        }
+        // Explosion, see Eventlistener
+        if (save.explosionCountdown > 0) {
+            save.explosionCountdown -= 1;
+        }
+        // Game Ticks
         save.gameTicks += 1;
     }
 
@@ -490,9 +544,9 @@ public final class OverboardPlugin extends JavaPlugin {
         Location location = world.getBlockAt(vec.x, world.getMaxHeight(), vec.z).getLocation().add(0.5, 0.0, 0.5);
         switch (random.nextInt(30)) {
         case 0:
-            if (save.gameTicks < 20 * 60 * 5) return;
-            world.spawnEntity(location, EntityType.MINECART_TNT);
-            break;
+            // if (save.gameTicks < 20 * 60 * 5) return;
+            // world.spawnEntity(location, EntityType.MINECART_TNT);
+            // break;
         case 1:
             if (save.gameTicks < 20 * 60 * 4) return;
             world.strikeLightning(vec.toCenterFloorLocation(world));
@@ -525,11 +579,7 @@ public final class OverboardPlugin extends JavaPlugin {
         if (vecs.isEmpty()) return;
         Vec3i vec = vecs.get(random.nextInt(vecs.size()));
         Location location = world.getBlockAt(vec.x, world.getMaxHeight(), vec.z).getLocation().add(0.5, 0.0, 0.5);
-        if (random.nextInt(10) == 0) {
-            world.spawnEntity(location, EntityType.MINECART_TNT);
-        } else {
-            world.spawnFallingBlock(location, Material.FIRE.createBlockData());
-        }
+        world.spawnFallingBlock(location, Material.FIRE.createBlockData());
     }
 
     private void tickGamePlayer(Player player, Pirate pirate) {

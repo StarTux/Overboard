@@ -24,6 +24,10 @@ public final class Save {
     protected int dropCooldown;
     protected int tickSpeed;
     protected boolean useTeams = true;
+    protected int floodCooldown;
+    protected int nextFloodCooldown;
+    protected int waterLevel;
+    protected int explosionCountdown;
 
     public void addScore(UUID uuid, int value) {
         int score = scores.getOrDefault(uuid, 0) + value;
