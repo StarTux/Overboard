@@ -362,6 +362,7 @@ public final class EventListener implements Listener {
         }
     }
 
+    @EventHandler(ignoreCancelled = true)
     private void onPlayerTPA(PlayerTPAEvent event) {
         event.setCancelled(true);
     }
