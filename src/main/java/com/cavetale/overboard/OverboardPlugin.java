@@ -8,7 +8,6 @@ import com.cavetale.core.util.Json;
 import com.cavetale.fam.trophy.Highscore;
 import com.cavetale.mytems.Mytems;
 import com.cavetale.mytems.item.trophy.TrophyCategory;
-import com.cavetale.mytems.util.Items;
 import com.cavetale.overboard.world.Worlds;
 import com.winthier.title.TitlePlugin;
 import java.io.File;
@@ -28,18 +27,19 @@ import org.bukkit.GameMode;
 import org.bukkit.GameRule;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.SoundCategory;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.Waterlogged;
 import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.FallingBlock;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.LeatherArmorMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.util.BoundingBox;
+import static com.cavetale.mytems.util.Items.tooltip;
 import static net.kyori.adventure.text.Component.empty;
 import static net.kyori.adventure.text.Component.space;
 import static net.kyori.adventure.text.Component.text;
@@ -538,11 +538,11 @@ public final class OverboardPlugin extends JavaPlugin {
                                                               new ItemStack(Material.SPYGLASS));
 
     private static ItemStack totem() {
-        return Items.text(new ItemStack(Material.TOTEM_OF_UNDYING),
-                          List.of(text("Respawn Team Member", GREEN),
-                                  textOfChildren(Mytems.MOUSE_RIGHT, text(" activate", GRAY)),
-                                  text("Respawn a drowned team", GRAY),
-                                  text("member.", GRAY)));
+        return tooltip(new ItemStack(Material.TOTEM_OF_UNDYING),
+                       List.of(text("Respawn Team Member", GREEN),
+                               textOfChildren(Mytems.MOUSE_RIGHT, text(" activate", GRAY)),
+                               text("Respawn a drowned team", GRAY),
+                               text("member.", GRAY)));
     }
 
     private void drop() {
@@ -570,7 +570,7 @@ public final class OverboardPlugin extends JavaPlugin {
         case 2:
         case 3:
             if (save.gameTicks < 20 * 60 * 2) return;
-            world.spawnFallingBlock(location, Material.FIRE.createBlockData());
+            world.spawn(location, FallingBlock.class, e -> e.setBlockData(Material.FIRE.createBlockData()));
             break;
         case 4:
         case 5:
@@ -595,7 +595,7 @@ public final class OverboardPlugin extends JavaPlugin {
         if (vecs.isEmpty()) return;
         Vec3i vec = vecs.get(random.nextInt(vecs.size()));
         Location location = world.getBlockAt(vec.x, world.getMaxHeight(), vec.z).getLocation().add(0.5, 0.0, 0.5);
-        world.spawnFallingBlock(location, Material.FIRE.createBlockData());
+        world.spawn(location, FallingBlock.class, e -> e.setBlockData(Material.FIRE.createBlockData()));
     }
 
     private void tickGamePlayer(Player player, Pirate pirate) {
@@ -620,7 +620,6 @@ public final class OverboardPlugin extends JavaPlugin {
         }
         // Death Checks
         if (player.getLocation().getBlock().getType() == Material.WATER) {
-            player.getWorld().spawnParticle(Particle.WATER_WAKE, player.getLocation(), 32, 0.1, 0.1, 0.1, 0.2);
             player.getWorld().playSound(player.getLocation(), Sound.ENTITY_GENERIC_SPLASH, 1.0f, 1.0f);
             die(player);
             for (Player online : Bukkit.getOnlinePlayers()) {
