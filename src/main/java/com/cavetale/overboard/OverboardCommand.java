@@ -1,7 +1,9 @@
 package com.cavetale.overboard;
 
+import com.cavetale.core.event.minigame.MinigameMatchType;
 import com.cavetale.fam.trophy.Highscore;
 import com.cavetale.mytems.item.trophy.TrophyCategory;
+import com.winthier.creative.BuildWorld;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -24,12 +26,23 @@ public final class OverboardCommand implements TabExecutor {
         if (args.length == 0) return false;
         switch (args[0]) {
         case "start":
-            plugin.startGame();
-            sender.sendMessage(text("Starting game", RED));
+            if (args.length != 2) return false;
+            final String path = args[1];
+            final BuildWorld buildWorld = BuildWorld.findWithPath(path);
+            if (buildWorld == null) {
+                sender.sendMessage(text("World not found: " + path, RED));
+                return true;
+            }
+            if (buildWorld.getRow().parseMinigame() != MinigameMatchType.OVERBOARD) {
+                sender.sendMessage(text("Not an Overboard world: " + buildWorld.getRow().getName(), RED));
+                return true;
+            }
+            plugin.startGame(buildWorld);
+            sender.sendMessage(text("Starting game in " + buildWorld.getRow().getName(), YELLOW));
             return true;
         case "stop":
             plugin.stopGame();
-            sender.sendMessage(text("Stopping game", RED));
+            sender.sendMessage(text("Stopping game", YELLOW));
             return true;
         case "debug":
             if (args.length == 2) {
@@ -80,14 +93,23 @@ public final class OverboardCommand implements TabExecutor {
 
     @Override
     public List<String> onTabComplete(final CommandSender sender, final Command command, final String alias, final String[] args) {
+        final List<String> result = new ArrayList<>();
         if (args.length == 1) {
             String argl = args[0].toLowerCase();
-            List<String> result = new ArrayList<>();
             for (String arg : List.of("start", "stop", "debug", "event", "event", "save", "resetscore", "rewardscores", "skip")) {
                 if (arg.contains(argl)) result.add(arg);
             }
             return result;
         }
-        return null;
+        if (args.length == 2 && args[0].equals("start")) {
+            final String lower = args[1].toLowerCase();
+            for (BuildWorld buildWorld : BuildWorld.findMinigameWorlds(MinigameMatchType.OVERBOARD, false)) {
+                final String path = buildWorld.getPath();
+                if (path.toLowerCase().contains(lower)) {
+                    result.add(path);
+                }
+            }
+        }
+        return result;
     }
 }

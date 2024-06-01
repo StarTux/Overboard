@@ -8,7 +8,8 @@ import com.cavetale.core.util.Json;
 import com.cavetale.fam.trophy.Highscore;
 import com.cavetale.mytems.Mytems;
 import com.cavetale.mytems.item.trophy.TrophyCategory;
-import com.cavetale.overboard.world.Worlds;
+import com.winthier.creative.BuildWorld;
+import com.winthier.creative.file.Files;
 import com.winthier.title.TitlePlugin;
 import java.io.File;
 import java.util.ArrayList;
@@ -56,6 +57,7 @@ public final class OverboardPlugin extends JavaPlugin {
     // Save
     protected Save save;
     // World
+    protected BuildWorld buildWorld;
     protected World world;
     protected List<Area> gameAreas;
     protected List<Area> deathAreas;
@@ -93,7 +95,7 @@ public final class OverboardPlugin extends JavaPlugin {
     public void onDisable() {
         save();
         if (world != null) {
-            Worlds.deleteWorld(world);
+            Files.deleteWorld(world);
             world = null;
         }
         for (Player player : Bukkit.getOnlinePlayers()) {
@@ -120,27 +122,6 @@ public final class OverboardPlugin extends JavaPlugin {
         return false;
     }
 
-    protected void loadWorld() {
-        world = Worlds.loadWorldCopy(save.worldName);
-        if (world == null) throw new IllegalStateException("Loaded world is null");
-        AreasFile areasFile = AreasFile.load(world, "Overboard");
-        try {
-            if (areasFile == null) throw new IllegalStateException("Loaded areas file is null");
-            gameAreas = areasFile.find("game");
-            if (gameAreas.isEmpty()) throw new IllegalStateException("Game areas is emtpy");
-            deathAreas = areasFile.find("death");
-            if (deathAreas.isEmpty()) throw new IllegalStateException("Death areas is emtpy");
-            spawnAreas = areasFile.find("spawn");
-            if (spawnAreas.isEmpty()) throw new IllegalStateException("Spawn areas is emtpy");
-            dropAreas = areasFile.find("drop");
-            if (dropAreas.isEmpty()) throw new IllegalStateException("Drop areas is emtpy");
-        } catch (IllegalStateException iae) {
-            iae.printStackTrace();
-            Worlds.deleteWorld(world);
-            world = null;
-        }
-    }
-
     public void load() {
         save = Json.load(new File(getDataFolder(), "save.json"), Save.class, Save::new);
     }
@@ -149,9 +130,14 @@ public final class OverboardPlugin extends JavaPlugin {
         Json.save(new File(getDataFolder(), "save.json"), save, true);
     }
 
-    public void startGame() {
-        save.worldName = "StillDuck";
-        loadWorld();
+    public void startGame(BuildWorld theBuildWorld) {
+        this.buildWorld = theBuildWorld;
+        buildWorld.makeLocalCopyAsync(this::onWorldLoaded);
+    }
+
+    private void onWorldLoaded(World newWorld) {
+        this.world = newWorld;
+        // WOrld
         world.setPVP(false);
         world.setGameRule(GameRule.NATURAL_REGENERATION, true);
         world.setGameRule(GameRule.DO_FIRE_TICK, true);
@@ -161,6 +147,21 @@ public final class OverboardPlugin extends JavaPlugin {
         world.setGameRule(GameRule.DO_WEATHER_CYCLE, false);
         world.setGameRule(GameRule.MOB_GRIEFING, true);
         world.setDifficulty(Difficulty.PEACEFUL);
+        // Area
+        AreasFile areasFile = AreasFile.load(world, "Overboard");
+        try {
+            if (areasFile == null) throw new IllegalStateException("Loaded areas file is null");
+            gameAreas = areasFile.find("game");
+            if (gameAreas.isEmpty()) throw new IllegalStateException("Game areas is emtpy");
+            deathAreas = areasFile.find("death");
+            spawnAreas = areasFile.find("spawn");
+            if (spawnAreas.isEmpty()) throw new IllegalStateException("Spawn areas is emtpy");
+            dropAreas = areasFile.find("drop");
+            if (dropAreas.isEmpty()) throw new IllegalStateException("Drop areas is emtpy");
+        } catch (IllegalStateException iae) {
+            iae.printStackTrace();
+            world = null;
+        }
         // Spawns
         spawnLocations = findSpawnLocations();
         Collections.shuffle(spawnLocations);
@@ -311,7 +312,7 @@ public final class OverboardPlugin extends JavaPlugin {
         save();
         World oldWorld = world;
         world = null;
-        Worlds.deleteWorld(oldWorld);
+        Files.deleteWorld(oldWorld);
     }
 
     protected List<Vec3i> findSpawnLocations() {

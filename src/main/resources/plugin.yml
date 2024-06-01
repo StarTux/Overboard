@@ -8,7 +8,7 @@ api-version: '1.20'
 author: StarTux
 website: https://github.com/StarTux/Overboard
 
-depend: [Core, Mytems, Area, Fam, Title]
+depend: [Core, Mytems, Area, Fam, Title, Creative]
 softdepend: []
 
 commands:

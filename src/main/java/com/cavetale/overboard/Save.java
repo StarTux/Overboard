@@ -14,7 +14,6 @@ public final class Save {
     protected PirateTeam winnerTeam;
     protected boolean debug;
     protected boolean event;
-    protected String worldName;
     protected Map<UUID, Pirate> pirates = new HashMap<>();
     protected Map<UUID, Integer> scores = new HashMap<>();
     protected int ticks = 0;
