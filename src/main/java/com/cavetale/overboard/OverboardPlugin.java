@@ -408,7 +408,7 @@ public final class OverboardPlugin extends JavaPlugin {
                     names.add(pirate.name);
                     if (save.event) {
                         save.addScore(pirate.uuid, 3);
-                        pirate.money += 5000;
+                        pirate.money += 1000;
                         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "titles unlockset " + pirate.name + " Blackbeard Scalawag DavyJones");
                     }
                 }
@@ -432,7 +432,7 @@ public final class OverboardPlugin extends JavaPlugin {
             save.winners = List.of(winner.getUniqueId());
             if (save.event) {
                 save.addScore(winner.getUniqueId(), 3);
-                if (pirate != null) pirate.money += 5000;
+                if (pirate != null) pirate.money += 1000;
                 computeHighscores();
                 Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "titles unlockset " + winner.getName() + " Blackbeard Scalawag DavyJones");
             }
