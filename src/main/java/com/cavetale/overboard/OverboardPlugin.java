@@ -146,6 +146,7 @@ public final class OverboardPlugin extends JavaPlugin {
         world.setGameRule(GameRule.DO_DAYLIGHT_CYCLE, true);
         world.setGameRule(GameRule.DO_WEATHER_CYCLE, false);
         world.setGameRule(GameRule.MOB_GRIEFING, true);
+        world.setGameRule(GameRule.FALL_DAMAGE, false);
         world.setDifficulty(Difficulty.PEACEFUL);
         // Area
         AreasFile areasFile = AreasFile.load(world, "Overboard");
