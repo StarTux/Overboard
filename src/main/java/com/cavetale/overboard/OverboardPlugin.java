@@ -536,7 +536,12 @@ public final class OverboardPlugin extends JavaPlugin {
                                                               new ItemStack(Material.LADDER, 16),
                                                               new ItemStack(Material.ENDER_PEARL),
                                                               new ItemStack(Material.ENDER_PEARL, 2),
-                                                              new ItemStack(Material.SPYGLASS));
+                                                              new ItemStack(Material.SPYGLASS),
+                                                              new ItemStack(Material.WIND_CHARGE, 1),
+                                                              new ItemStack(Material.WIND_CHARGE, 2),
+                                                              new ItemStack(Material.WIND_CHARGE, 3),
+                                                              new ItemStack(Material.WIND_CHARGE, 4),
+                                                              new ItemStack(Material.WIND_CHARGE, 5));
 
     private static ItemStack totem() {
         return tooltip(new ItemStack(Material.TOTEM_OF_UNDYING),
