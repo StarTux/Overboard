@@ -662,7 +662,7 @@ public final class OverboardPlugin extends JavaPlugin {
         pirate.dead = true;
         pirate.respawnCooldown = 100;
         for (int i = 0; i < pirate.deaths; i += 1) {
-            pirate.respawnCooldown *= 2;
+            pirate.respawnCooldown += 50;
         }
         pirate.deaths += 1;
     }
