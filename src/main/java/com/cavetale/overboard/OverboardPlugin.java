@@ -16,9 +16,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
@@ -317,7 +319,7 @@ public final class OverboardPlugin extends JavaPlugin {
     }
 
     protected List<Vec3i> findSpawnLocations() {
-        List<Vec3i> result = new ArrayList<>();
+        Set<Vec3i> result = new HashSet<>();
         for (Area area : spawnAreas) {
             for (Vec3i vec : area.enumerate()) {
                 Block block = vec.toBlock(world);
@@ -333,7 +335,7 @@ public final class OverboardPlugin extends JavaPlugin {
                 }
             }
         }
-        return result;
+        return new ArrayList<>(result);
     }
 
     private void tick() {
