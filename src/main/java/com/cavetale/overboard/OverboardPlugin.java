@@ -247,6 +247,7 @@ public final class OverboardPlugin extends JavaPlugin {
         player.setHealth(20.0);
         player.setFoodLevel(20);
         player.setSaturation(20.0f);
+        player.setExhaustion(0f);
         player.setFireTicks(0);
         player.setGameMode(GameMode.SURVIVAL);
         pirate.spawnLocation = spawnLocations.get(nextSpawnLocationIndex++ % spawnLocations.size());
@@ -307,6 +308,7 @@ public final class OverboardPlugin extends JavaPlugin {
             player.setHealth(20.0);
             player.setFoodLevel(20);
             player.setSaturation(20.0f);
+            player.setExhaustion(0f);
             player.setFireTicks(0);
             TitlePlugin.getInstance().setColor(player, null);
         }
@@ -656,7 +658,9 @@ public final class OverboardPlugin extends JavaPlugin {
     }
 
     protected void die(Player player) {
-        player.setFoodLevel(player.getFoodLevel() / 2);
+        player.setFoodLevel(20);
+        player.setSaturation(20f);
+        player.setExhaustion(0f);
         player.setGameMode(GameMode.SPECTATOR);
         Pirate pirate = save.pirates.get(player.getUniqueId());
         if (pirate == null) return;
