@@ -7,6 +7,7 @@ import com.winthier.creative.BuildWorld;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabExecutor;
@@ -75,6 +76,9 @@ public final class OverboardCommand implements TabExecutor {
                                          plugin.TITLE,
                                          hi -> "You scored " + hi.score + " point" + (hi.score == 1 ? "" : "s"));
             sender.sendMessage(text("Rewarded " + count + " players!", YELLOW));
+            for (Component line : Highscore.rewardMoneyWithFeedback(plugin, plugin.save.scores, "Overboard!")) {
+                sender.sendMessage(line);
+            }
             return true;
         }
         case "skip":
