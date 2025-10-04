@@ -628,7 +628,8 @@ public final class OverboardPlugin extends JavaPlugin {
             return;
         }
         // Death Checks
-        if (player.getLocation().getBlock().getType() == Material.WATER) {
+        final Block playerBlock = player.getLocation().getBlock();
+        if (playerBlock.getType() == Material.WATER || playerBlock.getBlockData() instanceof Waterlogged waterlogged && waterlogged.isWaterlogged()) {
             player.getWorld().playSound(player.getLocation(), Sound.ENTITY_GENERIC_SPLASH, 1.0f, 1.0f);
             die(player);
             for (Player online : Bukkit.getOnlinePlayers()) {
