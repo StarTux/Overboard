@@ -2,10 +2,12 @@ package com.cavetale.overboard;
 
 import com.cavetale.core.struct.Vec3i;
 import java.util.UUID;
+import lombok.Data;
 
 /**
  * Player data stored in Save.
  */
+@Data
 public final class Pirate {
     protected UUID uuid;
     protected String name;

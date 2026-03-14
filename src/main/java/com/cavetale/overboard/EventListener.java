@@ -1,5 +1,7 @@
 package com.cavetale.overboard;
 
+import com.cavetale.core.event.entity.EntityShootEntityEvent;
+import com.cavetale.core.event.entity.EntityStrikeEntityEvent;
 import com.cavetale.core.event.hud.PlayerHudEvent;
 import com.cavetale.core.event.hud.PlayerHudPriority;
 import com.cavetale.core.event.player.PlayerTPAEvent;
@@ -365,5 +367,55 @@ public final class EventListener implements Listener {
     @EventHandler(ignoreCancelled = true)
     private void onPlayerTPA(PlayerTPAEvent event) {
         event.setCancelled(true);
+    }
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.LOW)
+    private void onEntityShootEntity(EntityShootEntityEvent event) {
+        if (!event.hasWeapon()) return;
+        if (!(event.getShooter() instanceof Player shooter)) return;
+        if (!(event.getTarget() instanceof Player target)) return;
+        if (!Mytems.BLUNDERBUSS.isItem(event.getWeapon())) return;
+        final Pirate shooterPirate = plugin.save.pirates.get(shooter.getUniqueId());
+        if (shooterPirate == null || !shooterPirate.isPlaying()) {
+            event.setCancelled(true);
+            return;
+        }
+        final Pirate targetPirate = plugin.save.pirates.get(target.getUniqueId());
+        if (targetPirate == null || !targetPirate.isPlaying()) {
+            event.setCancelled(true);
+            return;
+        }
+        if (plugin.getSave().isUseTeams() && shooterPirate.getTeam() == targetPirate.getTeam()) {
+            event.setCancelled(true);
+            return;
+        }
+        plugin.getLogger().info(shooter.getName() + " hit " + target.getName() + " with Blunderbuss!");
+        plugin.save.addScore(shooter.getUniqueId(), 1);
+        plugin.computeHighscores();
+    }
+
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.LOW)
+    private void onEntityStrikeEntity(EntityStrikeEntityEvent event) {
+        if (!event.hasWeapon()) return;
+        if (!(event.getAttacker() instanceof Player attacker)) return;
+        if (!(event.getTarget() instanceof Player target)) return;
+        if (!Mytems.CAPTAINS_CUTLASS.isItem(event.getWeapon())) return;
+        final Pirate attackerPirate = plugin.save.pirates.get(attacker.getUniqueId());
+        if (attackerPirate == null || !attackerPirate.isPlaying()) {
+            event.setCancelled(true);
+            return;
+        }
+        final Pirate targetPirate = plugin.save.pirates.get(target.getUniqueId());
+        if (targetPirate == null || !targetPirate.isPlaying()) {
+            event.setCancelled(true);
+            return;
+        }
+        if (plugin.getSave().isUseTeams() && attackerPirate.getTeam() == targetPirate.getTeam()) {
+            event.setCancelled(true);
+            return;
+        }
+        plugin.getLogger().info(attacker.getName() + " hit " + target.getName() + " with Captains Cutlass!");
+        plugin.save.addScore(attacker.getUniqueId(), 1);
+        plugin.computeHighscores();
     }
 }

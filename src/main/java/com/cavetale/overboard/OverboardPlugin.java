@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
+import lombok.Getter;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Color;
@@ -50,6 +51,7 @@ import static net.kyori.adventure.text.Component.textOfChildren;
 import static net.kyori.adventure.text.format.NamedTextColor.*;
 import static net.kyori.adventure.title.Title.title;
 
+@Getter
 public final class OverboardPlugin extends JavaPlugin {
     private static OverboardPlugin instance;
     private static final int FLOOD_COOLDOWN = 20 * 60;
@@ -412,7 +414,7 @@ public final class OverboardPlugin extends JavaPlugin {
                     save.winners.add(pirate.uuid);
                     names.add(pirate.name);
                     if (save.event) {
-                        save.addScore(pirate.uuid, 3);
+                        save.addScore(pirate.uuid, 10);
                         pirate.money += 1000;
                         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "titles unlockset " + pirate.name + " Blackbeard Scalawag DavyJones");
                     }
@@ -436,7 +438,7 @@ public final class OverboardPlugin extends JavaPlugin {
             final Pirate pirate = save.pirates.get(winner.getUniqueId());
             save.winners = List.of(winner.getUniqueId());
             if (save.event) {
-                save.addScore(winner.getUniqueId(), 3);
+                save.addScore(winner.getUniqueId(), 10);
                 if (pirate != null) pirate.money += 1000;
                 computeHighscores();
                 Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "titles unlockset " + winner.getName() + " Blackbeard Scalawag DavyJones");

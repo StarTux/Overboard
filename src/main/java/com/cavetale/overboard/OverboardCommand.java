@@ -76,9 +76,7 @@ public final class OverboardCommand implements TabExecutor {
                                          plugin.TITLE,
                                          hi -> "You scored " + hi.score + " point" + (hi.score == 1 ? "" : "s"));
             sender.sendMessage(text("Rewarded " + count + " players!", YELLOW));
-            for (Component line : Highscore.rewardMoneyWithFeedback(plugin, plugin.save.scores, "Overboard!")) {
-                sender.sendMessage(line);
-            }
+            Highscore.rewardMoneyWithFeedback(sender, plugin, plugin.save.scores, "Overboard!");
             return true;
         }
         case "skip":
