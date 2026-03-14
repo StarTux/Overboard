@@ -328,6 +328,7 @@ public final class OverboardPlugin extends JavaPlugin {
             for (Vec3i vec : area.enumerate()) {
                 Block block = vec.toBlock(world);
                 if (block.isLiquid()) continue;
+                if (isWater(block)) continue;
                 if (block.getRelative(0, 1, 0).isLiquid()) continue;
                 if (!block.getCollisionShape().getBoundingBoxes().isEmpty()) continue;
                 if (!block.getRelative(0, 1, 0).getCollisionShape().getBoundingBoxes().isEmpty()) continue;
@@ -632,8 +633,7 @@ public final class OverboardPlugin extends JavaPlugin {
             return;
         }
         // Death Checks
-        final Block playerBlock = player.getLocation().getBlock();
-        if (playerBlock.getType() == Material.WATER || playerBlock.getBlockData() instanceof Waterlogged waterlogged && waterlogged.isWaterlogged()) {
+        if (isWater(player.getLocation().getBlock())) {
             player.getWorld().playSound(player.getLocation(), Sound.ENTITY_GENERIC_SPLASH, 1.0f, 1.0f);
             die(player);
             for (Player online : Bukkit.getOnlinePlayers()) {
@@ -649,6 +649,15 @@ public final class OverboardPlugin extends JavaPlugin {
             }
             return;
         }
+    }
+
+    private static boolean isWater(Block block) {
+        final Material mat = block.getType();
+        return mat == Material.WATER
+            || mat == Material.KELP_PLANT
+            || mat == Material.SEAGRASS
+            || mat == Material.TALL_SEAGRASS
+            || block.getBlockData() instanceof Waterlogged waterlogged && waterlogged.isWaterlogged();
     }
 
     private void tickEnd() {
