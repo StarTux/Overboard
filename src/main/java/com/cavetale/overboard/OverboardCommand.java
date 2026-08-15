@@ -4,6 +4,7 @@ import com.cavetale.core.event.minigame.MinigameMatchType;
 import com.cavetale.fam.trophy.Highscore;
 import com.cavetale.mytems.item.trophy.TrophyCategory;
 import com.winthier.creative.BuildWorld;
+import com.winthier.kit.Kits;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -76,6 +77,7 @@ public final class OverboardCommand implements TabExecutor {
                                          hi -> "You scored " + hi.score + " point" + (hi.score == 1 ? "" : "s"));
             sender.sendMessage(text("Rewarded " + count + " players!", YELLOW));
             Highscore.rewardMoneyWithFeedback(sender, plugin, plugin.save.scores, "Overboard!");
+            Kits.autoCreateKit(sender, "overboard", plugin.save.scores.keySet());
             return true;
         }
         case "skip":
